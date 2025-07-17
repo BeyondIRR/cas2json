@@ -1,0 +1,31 @@
+[project]
+name = "cas2json"
+dynamic = ["version"]
+description = "Serialise financial statements to python objects"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "cas2json/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cas2json"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "Q", "A", "I", "B", "S", "UP", "SIM", "RUF"]
+ignore = ["E501", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106", "S311"]
