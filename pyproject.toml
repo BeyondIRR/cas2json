@@ -3,7 +3,10 @@ name = "cas2json"
 dynamic = ["version"]
 description = "Serialise financial statements to python objects"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pymupdf>=1.24.0",
+    "python-dateutil>=2.8.2,<3",
+    ]
 
 [build-system]
 requires = ["hatchling"]
