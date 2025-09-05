@@ -2,8 +2,8 @@ import io
 
 from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError
-from cas2json.file_processors.nsdl import process_nsdl_text
 from cas2json.parsers.common import cas_pdf_to_text
+from cas2json.processors.nsdl import process_nsdl_text
 from cas2json.types import NSDLCASData
 
 

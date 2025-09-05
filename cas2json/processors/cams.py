@@ -89,7 +89,7 @@ def get_parsed_scheme_name(scheme: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_)]+$", "", scheme).strip()
 
 
-def parse_transaction(line: str, description_tail: str) -> list[TransactionData]:
+def parse_transaction(line: str) -> list[TransactionData]:
     """
     Parse a transaction line and return a list of TransactionData objects.
     """
@@ -109,8 +109,6 @@ def parse_transaction(line: str, description_tail: str) -> list[TransactionData]
         amount, units, nav, balance = get_transaction_values(values)
         description = description.strip()
         units = formatINR(units)
-        if description_tail != "":
-            description = f"{description} {description_tail}"
         txn_type, dividend_rate = get_transaction_type(description, units)
         transactions.append(
             TransactionData(
@@ -238,12 +236,7 @@ def process_detailed_text(parsed_lines: list[str]) -> ProcessedCASData:
             current_scheme.valuation.nav = formatINR(nav_match.group(2))
             continue
 
-        description_tail = ""
-        if description_tail_match := re.search(patterns.DESCRIPTION_TAIL, line):
-            description_tail = description_tail_match.group(1).strip()
-            line = line.replace(description_tail_match.group(1), "")
-
-        if parsed_txns := parse_transaction(line, description_tail):
+        if parsed_txns := parse_transaction(line):
             for txn in parsed_txns:
                 if txn.units is not None:
                     current_scheme.close_calculated += txn.units
@@ -263,11 +256,17 @@ def process_summary_text(parsed_lines: list[str]) -> ProcessedCASData:
 
     schemes: list[Scheme] = []
     current_folio: str | None = None
+    current_scheme = None
+
     for line in parsed_lines:
         if schemes and re.search("Total", line, re.I):
             break
 
         if summary_row_match := re.search(patterns.SUMMARY_ROW, line, MULTI_TEXT_FLAGS):
+            if current_scheme:
+                schemes.append(current_scheme)
+                current_scheme = None
+
             folio = summary_row_match.group("folio").strip()
             if current_folio is None or current_folio != folio:
                 current_folio = folio
@@ -275,7 +274,7 @@ def process_summary_text(parsed_lines: list[str]) -> ProcessedCASData:
             scheme_name = summary_row_match.group("name")
             scheme_name = re.sub(r"\(formerly.+?\)", "", scheme_name, flags=TEXT_FLAGS).strip()
 
-            scheme_data = Scheme(
+            current_scheme = Scheme(
                 scheme_name=scheme_name,
                 advisor="N/A",
                 pan="N/A",
@@ -295,6 +294,10 @@ def process_summary_text(parsed_lines: list[str]) -> ProcessedCASData:
                 ),
                 transactions=[],
             )
-            schemes.append(scheme_data)
+            continue
+
+        # Append any remaining scheme tails to the current scheme name
+        if current_scheme:
+            current_scheme.scheme_name = f"{current_scheme.scheme_name} {line.strip()}"
 
     return ProcessedCASData(cas_type=CASFileType.SUMMARY, statement_period=statement_period, schemes=schemes)

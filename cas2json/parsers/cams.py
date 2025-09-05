@@ -3,10 +3,10 @@ import re
 
 from cas2json.enums import CASFileType, FileType
 from cas2json.exceptions import CASParseError
-from cas2json.file_processors.cams import process_detailed_text, process_summary_text
 from cas2json.flags import MULTI_TEXT_FLAGS
 from cas2json.parsers.common import cas_pdf_to_text
 from cas2json.patterns import CAS_TYPE
+from cas2json.processors.cams import process_detailed_text, process_summary_text
 from cas2json.types import CASData
 
 
@@ -41,8 +41,6 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=T
     """
 
     partial_cas_data = cas_pdf_to_text(filename, password)
-    # with open("debug.txt", "w") as f:
-    #     f.write("\n".join(partial_cas_data.lines))
     if partial_cas_data.file_type not in [FileType.CAMS, FileType.KFINTECH]:
         raise CASParseError("Not a valid CAMS file")
 
