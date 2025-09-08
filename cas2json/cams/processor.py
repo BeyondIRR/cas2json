@@ -1,128 +1,24 @@
+import io
 import re
 from decimal import Decimal
 
 from dateutil import parser as date_parser
 
 from cas2json import patterns
-from cas2json.enums import CASFileType, TransactionType
+from cas2json.cams.helpers import detect_cas_type, get_parsed_scheme_name, parse_transaction
+from cas2json.enums import CASFileType
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
-from cas2json.helpers import formatINR, get_statement_dates
-from cas2json.types import ProcessedCASData, Scheme, SchemeValuation, StatementPeriod, TransactionData
-
-
-def get_transaction_type(description: str, units: Decimal | None) -> tuple[TransactionType, Decimal | None]:
-    """Get transaction type from the description text."""
-
-    description = description.lower()
-    # Dividend
-    if div_match := re.search(patterns.DIVIDEND, description, TEXT_FLAGS):
-        reinvest_flag, dividend_str = div_match.groups()
-        dividend_rate = Decimal(dividend_str)
-        txn_type = TransactionType.DIVIDEND_REINVEST if reinvest_flag else TransactionType.DIVIDEND_PAYOUT
-        return (txn_type, dividend_rate)
-
-    # Tax/Misc
-    if units is None:
-        if "stt" in description:
-            return (TransactionType.STT_TAX, None)
-        if "stamp" in description:
-            return (TransactionType.STAMP_DUTY_TAX, None)
-        if "tds" in description:
-            return (TransactionType.TDS_TAX, None)
-        return (TransactionType.MISC, None)
-
-    # Purchase/SwitchIn/SIP/Segregation
-    if units > 0:
-        if "switch" in description:
-            return (TransactionType.SWITCH_IN_MERGER if "merger" in description else TransactionType.SWITCH_IN, None)
-        if "segregat" in description:
-            return (TransactionType.SEGREGATION, None)
-        if (
-            "sip" in description
-            or "systematic" in description
-            or re.search("instal+ment", description, re.I)
-            or re.search("sys.+?invest", description, TEXT_FLAGS)
-        ):
-            return (TransactionType.PURCHASE_SIP, None)
-        return (TransactionType.PURCHASE, None)
-
-    # Redemption/Reversal/SwitchOut
-    if units < 0:
-        if re.search(r"reversal|rejection|dishonoured|mismatch|insufficient\s+balance", description, re.I):
-            return (TransactionType.REVERSAL, None)
-        if "switch" in description:
-            return (TransactionType.SWITCH_OUT_MERGER if "merger" in description else TransactionType.SWITCH_OUT, None)
-        return (TransactionType.REDEMPTION, None)
-
-    print("Warning: Error identifying transaction. Please report the issue with the transaction description")
-    print(f"Txn description: {description} :: Units: {units}")
-    return (TransactionType.UNKNOWN, None)
-
-
-def get_transaction_values(values: str) -> tuple[str | None, str | None, str | None, str | None]:
-    """
-    Extract transaction values in the order of amount, units, nav, and balance from the given string.
-    """
-    values = re.findall(patterns.AMT, values.strip())
-    units = nav = balance = amount = None
-    if len(values) >= 4:
-        # Normal entry
-        amount, units, nav, balance, *_ = values
-    elif len(values) == 3:
-        # Zero unit entry
-        amount, nav, balance = values
-        units = "0.000"
-    elif len(values) == 2:
-        # Segregated Portfolio Entries
-        units, balance = values
-    elif len(values) == 1:
-        # Tax entries
-        amount = values[0]
-    return amount, units, nav, balance
-
-
-def get_parsed_scheme_name(scheme: str) -> str:
-    scheme = re.sub(r"\((formerly|erstwhile).+?\)", "", scheme, flags=TEXT_FLAGS).strip()
-    scheme = re.sub(r"\((Demat|Non-Demat).*", "", scheme, flags=TEXT_FLAGS).strip()
-    scheme = re.sub(r"\s+", " ", scheme).strip()
-    return re.sub(r"[^a-zA-Z0-9_)]+$", "", scheme).strip()
-
-
-def parse_transaction(line: str) -> list[TransactionData]:
-    """
-    Parse a transaction line and return a list of TransactionData objects.
-    """
-    transactions: list[TransactionData] = []
-    parsed_transactions = re.findall(patterns.TRANSACTIONS, line, MULTI_TEXT_FLAGS)
-    if not parsed_transactions:
-        return transactions
-
-    for txn in parsed_transactions:
-        date, details, *_ = txn
-        if not details or not details.strip() or not date:
-            continue
-        description_match = re.match(patterns.DESCRIPTION, details.strip(), MULTI_TEXT_FLAGS)
-        if not description_match:
-            continue
-        description, values, *_ = description_match.groups()
-        amount, units, nav, balance = get_transaction_values(values)
-        description = description.strip()
-        units = formatINR(units)
-        txn_type, dividend_rate = get_transaction_type(description, units)
-        transactions.append(
-            TransactionData(
-                date=date_parser.parse(date).date(),
-                description=description,
-                type=txn_type.name,
-                amount=formatINR(amount),
-                units=units,
-                nav=formatINR(nav),
-                balance=formatINR(balance),
-                dividend_rate=dividend_rate,
-            )
-        )
-    return transactions
+from cas2json.parser import cas_pdf_to_text
+from cas2json.types import (
+    CASData,
+    FileType,
+    ProcessedCASData,
+    Scheme,
+    SchemeValuation,
+    StatementPeriod,
+)
+from cas2json.utils import formatINR, get_statement_dates
 
 
 def process_detailed_text(parsed_lines: list[str]) -> ProcessedCASData:
@@ -301,3 +197,53 @@ def process_summary_text(parsed_lines: list[str]) -> ProcessedCASData:
             current_scheme.scheme_name = f"{current_scheme.scheme_name} {line.strip()}"
 
     return ProcessedCASData(cas_type=CASFileType.SUMMARY, statement_period=statement_period, schemes=schemes)
+
+
+def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=True):
+    """
+    Parse CAMS or KFintech CAS pdf and returns processed data.
+
+    Parameters
+    ----------
+    filename : str | io.IOBase
+        The path to the PDF file or a file-like object.
+    password : str
+        The password to unlock the PDF file.
+    sort_transactions : bool
+        Whether to sort transactions by date and re-compute balances.
+
+    Returns
+    -------
+    Parsed CAMS or KFintech CAS data
+    """
+
+    partial_cas_data = cas_pdf_to_text(filename, password)
+    if partial_cas_data.file_type not in [FileType.CAMS, FileType.KFINTECH]:
+        raise CASParseError("Not a valid CAMS file")
+
+    cas_statement_type = detect_cas_type(partial_cas_data.lines)
+    if cas_statement_type == CASFileType.DETAILED:
+        processed_data = process_detailed_text(partial_cas_data.lines)
+    elif cas_statement_type == CASFileType.SUMMARY:
+        processed_data = process_summary_text(partial_cas_data.lines)
+    else:
+        raise CASParseError("Unknown CAS file type")
+
+    if sort_transactions:
+        for scheme in processed_data.schemes:
+            transactions = scheme.transactions
+            sorted_transactions = sorted(transactions, key=lambda x: x.date)
+            if transactions != sorted_transactions:
+                balance = scheme.open
+                for transaction in sorted_transactions:
+                    balance += transaction.units or 0
+                    transaction.balance = balance
+                scheme.transactions = sorted_transactions
+
+    return CASData(
+        statement_period=processed_data.statement_period,
+        schemes=processed_data.schemes,
+        cas_type=processed_data.cas_type,
+        investor_info=partial_cas_data.investor_info,
+        file_type=partial_cas_data.file_type,
+    )

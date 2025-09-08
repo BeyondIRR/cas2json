@@ -1,9 +1,13 @@
+import io
 import re
 
 from cas2json import patterns
+from cas2json.enums import FileType
+from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS
-from cas2json.helpers import get_statement_dates
+from cas2json.parser import cas_pdf_to_text
 from cas2json.types import DematAccount, DematOwner, Equity, MutualFund, NSDLCASData, StatementPeriod
+from cas2json.utils import get_statement_dates
 
 
 def process_nsdl_text(text):
@@ -96,3 +100,16 @@ def process_nsdl_text(text):
     )
 
     return cas_data
+
+
+def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> NSDLCASData:
+    partial_cas_data = cas_pdf_to_text(filename, password)
+    if partial_cas_data.file_type != FileType.NSDL:
+        raise CASParseError("Not a valid NSDL file")
+    processed_data = process_nsdl_text("\u2029".join(partial_cas_data.lines))
+    return NSDLCASData(
+        statement_period=processed_data.statement_period,
+        accounts=processed_data.accounts,
+        investor_info=partial_cas_data.investor_info,
+        file_type=partial_cas_data.file_type,
+    )
