@@ -75,7 +75,7 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
     raise CASParseError("Unable to parse investor data")
 
 
-def recover_lines(page: Page):
+def recover_lines(page: Page, tolerance: int = 3, vertical_factor: int = 4) -> list[str]:
     """
     Reconstitute text lines on the page by using the coordinates of the
     single words.
@@ -86,6 +86,10 @@ def recover_lines(page: Page):
     ----------
     page : Page
         The pymupdf page object to extract information from.
+    tolerance : int
+        The tolerance level for line reconstitution (should words be joined)
+    vertical_factor : int
+        Factor for detecting words aligned vertically.
 
     Returns
     -------
@@ -101,13 +105,12 @@ def recover_lines(page: Page):
     line = [words[0]]  # current line
     lrect = words[0][0]  # the line's rectangle
 
-    # walk through the words
     for wr, text in words[1:]:
         # ignore vertical elements
-        if abs(wr.x1 - wr.x0) * 4 < abs(wr.y1 - wr.y0):
+        if abs(wr.x1 - wr.x0) * vertical_factor < abs(wr.y1 - wr.y0):
             continue
         # if this word matches top or bottom of the line, append it
-        if abs(lrect.y0 - wr.y0) <= 3 or abs(lrect.y1 - wr.y1) <= 3:
+        if abs(lrect.y0 - wr.y0) <= tolerance or abs(lrect.y1 - wr.y1) <= tolerance:
             line.append((wr, text))
             lrect |= wr
         else:

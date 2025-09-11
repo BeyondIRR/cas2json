@@ -199,7 +199,7 @@ def process_summary_text(parsed_lines: list[str]) -> ProcessedCASData:
     return ProcessedCASData(cas_type=CASFileType.SUMMARY, statement_period=statement_period, schemes=schemes)
 
 
-def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=True):
+def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=True) -> CASData:
     """
     Parse CAMS or KFintech CAS pdf and returns processed data.
 
