@@ -12,7 +12,7 @@ from cas2json.types import (
     DocumentData,
     ProcessedCASData,
     Scheme,
-    SchemeValuation,
+    SchemeExtras,
     StatementPeriod,
     TransactionData,
     WordData,
@@ -131,18 +131,16 @@ class CASProcessor:
         - "Closing Unit Balance: 50.166 NAV on 20-Sep-2001: INR 112.1222 Total Cost Value: 123.12 Market Value on 20-Sep-2001: INR 110.24"
         """
         if close_units_match := re.search(patterns.CLOSE_UNITS, line):
-            current_scheme.close = formatINR(close_units_match.group(1))
+            current_scheme.extras.closing_units = formatINR(close_units_match.group(1))
 
         if cost_match := re.search(patterns.COST, line, re.I):
-            current_scheme.valuation.cost = formatINR(cost_match.group(1))
+            current_scheme.cost = formatINR(cost_match.group(1))
 
         if valuation_match := re.search(patterns.VALUATION, line, re.I):
-            current_scheme.valuation.date = date_parser.parse(valuation_match.group(1)).date()
-            current_scheme.valuation.value = formatINR(valuation_match.group(2))
+            current_scheme.market_value = formatINR(valuation_match.group(2))
 
         if nav_match := re.search(patterns.NAV, line, re.I):
-            current_scheme.valuation.date = date_parser.parse(nav_match.group(1)).date()
-            current_scheme.valuation.nav = formatINR(nav_match.group(2))
+            current_scheme.nav = formatINR(nav_match.group(2))
 
         return current_scheme
 
@@ -285,27 +283,30 @@ class CASProcessor:
                         finalize_current_scheme()
                     current_scheme = Scheme(
                         scheme_name=scheme_name,
-                        amc=current_amc,
+                        isin=isin,
                         pan=current_pan,
                         folio=current_folio,
-                        advisor=advisor,
-                        rta=None,
-                        rta_code=rta_code,
-                        isin=isin,
-                        open=Decimal("0.0"),
-                        close=Decimal("0.0"),
-                        close_calculated=Decimal("0.0"),
-                        valuation=SchemeValuation(date=statement_period.to, value=Decimal("0.0"), nav=Decimal("0.0")),
+                        units=Decimal("0.0"),
+                        nav=Decimal("0.0"),
+                        cost=None,
+                        market_value=None,
+                        extras=SchemeExtras(
+                            amc=current_amc,
+                            advisor=advisor,
+                            rta_code=rta_code,
+                            opening_units=Decimal("0.0"),
+                            closing_units=Decimal("0.0"),
+                        ),
                         transactions=[],
                     )
                     if current_registrar:
-                        current_scheme.rta = current_registrar
+                        current_scheme.extras.rta = current_registrar
                         current_registrar = None
 
                 # Registrar can be on the same line as scheme description or on the next/previous line
                 if registrar := self.extract_registrar(line):
                     if current_scheme:
-                        current_scheme.rta = registrar
+                        current_scheme.extras.rta = registrar
                     else:
                         current_registrar = registrar
                     continue
@@ -318,13 +319,13 @@ class CASProcessor:
                     continue
 
                 if (open_units := self.extract_open_units(line)) is not None:
-                    current_scheme.open = current_scheme.close_calculated = open_units
+                    current_scheme.open = current_scheme.units = open_units
                     continue
 
                 if parsed_txns := self.extract_transactions(line, word_rects, headers=page_data.headers_data):
                     for txn in parsed_txns:
                         if txn.units is not None:
-                            current_scheme.close_calculated += txn.units
+                            current_scheme.units += txn.units
                     current_scheme.transactions.extend(parsed_txns)
 
                 current_scheme = self.extract_scheme_valuation(line, current_scheme)
@@ -365,22 +366,15 @@ class CASProcessor:
                     scheme_name = re.sub(r"\(formerly.+?\)", "", scheme_name, flags=TEXT_FLAGS).strip()
 
                     current_scheme = Scheme(
-                        scheme_name=scheme_name,
-                        advisor="N/A",
-                        pan="N/A",
-                        folio=current_folio,
-                        amc="N/A",
-                        rta_code=summary_row_match.group("code").strip(),
-                        rta=summary_row_match.group("rta").strip(),
                         isin=summary_row_match.group("isin"),
-                        open=formatINR(summary_row_match.group("balance")),
-                        close=formatINR(summary_row_match.group("balance")),
-                        close_calculated=formatINR(summary_row_match.group("balance")),
-                        valuation=SchemeValuation(
-                            date=date_parser.parse(summary_row_match.group("date")).date(),
-                            nav=formatINR(summary_row_match.group("nav")),
-                            value=formatINR(summary_row_match.group("value")),
-                            cost=formatINR(summary_row_match.group("cost")),
+                        scheme_name=scheme_name,
+                        folio=current_folio,
+                        units=formatINR(summary_row_match.group("balance")),
+                        nav=formatINR(summary_row_match.group("nav")),
+                        market_value=formatINR(summary_row_match.group("value")),
+                        cost=formatINR(summary_row_match.group("cost")),
+                        extras=SchemeExtras(
+                            rta=summary_row_match.group("rta").strip(), rta_code=summary_row_match.group("code").strip()
                         ),
                         transactions=[],
                     )

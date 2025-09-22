@@ -6,7 +6,7 @@ from decimal import Decimal
 from pymupdf import Rect
 
 from cas2json.constants import HOLDINGS_CASHFLOW
-from cas2json.enums import FileType, FileVersion, TransactionType
+from cas2json.enums import FileType, FileVersion, SchemeType, TransactionType
 
 WordData = tuple[Rect, str]
 DocumentData = list["PageData"]
@@ -53,29 +53,38 @@ class TransactionData:
 
 
 @dataclass(slots=True)
-class SchemeValuation:
-    date: date | str
-    nav: Decimal | float
-    value: Decimal | float
-    cost: Decimal | float | None = None
+class SchemeExtras:
+    advisor: str | None = None
+    amc: str | None = None
+    rta: str | None = None
+    rta_code: str | None = None
+    opening_units: Decimal | float | None = None
+    closing_units: Decimal | float | None = None
 
 
 @dataclass(slots=True)
 class Scheme:
+    isin: str
     scheme_name: str
-    rta_code: str
-    rta: str
-    open: Decimal | float
-    close: Decimal | float
-    close_calculated: Decimal | float
-    valuation: SchemeValuation
-    transactions: list[TransactionData]
-    folio: str
-    amc: str
+    nav: Decimal | float
+    units: Decimal | float
+    cost: Decimal | float | None
     pan: str | None = None
-    isin: str | None = None
-    advisor: str | None = None
+    folio: str | None = None
+    demat_number: str | None = None
+    market_value: Decimal | float | None = None
+    invested_value: Decimal | float | None = None
+    scheme_type: SchemeType = SchemeType.OTHER
     nominees: list[str] = field(default_factory=list)
+    transactions: list[TransactionData] = field(default_factory=list)
+    # TODO: keep empty dictionary?
+    extras: SchemeExtras = field(default_factory=SchemeExtras)
+
+    def __post__init__(self):
+        if not self.invested_value and self.cost and self.units:
+            self.invested_value = self.cost * self.units
+        if not self.market_value and self.nav and self.units:
+            self.market_value = self.nav * self.units
 
 
 @dataclass(slots=True)
@@ -112,59 +121,21 @@ class DematOwner:
 
 
 @dataclass(slots=True)
-class Equity:
-    isin: str
-    num_shares: Decimal
-    price: Decimal
-    value: Decimal
-    name: str | None = None
-
-    def __post_init__(self):
-        if isinstance(self.num_shares, str):
-            self.num_shares = Decimal(self.num_shares.replace(",", ""))
-        if isinstance(self.price, str):
-            self.price = Decimal(self.price.replace(",", ""))
-        if isinstance(self.value, str):
-            self.value = Decimal(self.value.replace(",", ""))
-
-
-@dataclass(slots=True)
-class MutualFund:
-    isin: str
-    balance: Decimal
-    nav: Decimal
-    value: Decimal
-    name: str | None = None
-
-    def __post_init__(self):
-        if isinstance(self.balance, str):
-            self.balance = Decimal(self.balance.replace(",", ""))
-        if isinstance(self.nav, str):
-            self.nav = Decimal(self.nav.replace(",", ""))
-        if isinstance(self.value, str):
-            self.value = Decimal(self.value.replace(",", ""))
-
-
-@dataclass(slots=True)
 class DematAccount:
     name: str
-    type: str
-    folios: int
-    balance: Decimal
-    owners: list[DematOwner]
-    equities: list[Equity]
-    mutual_funds: list[MutualFund]
+    ac_type: str
+    units: Decimal
+    schemes_count: int
     dp_id: str | None = ""
+    folios: int | None = None
     client_id: str | None = ""
-
-    def __post_init__(self):
-        if isinstance(self.balance, str):
-            self.balance = Decimal(self.balance.replace(",", ""))
+    holders: list[DematOwner] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class NSDLCASData:
     accounts: list[DematAccount]
+    schemes: list[Scheme]
     statement_period: StatementPeriod
     investor_info: InvestorInfo | None = None
     file_type: FileType | None = None

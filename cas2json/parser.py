@@ -37,7 +37,7 @@ def parse_file_version(page_blocks: list[tuple]) -> FileVersion:
     return FileVersion.UNKNOWN
 
 
-def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
+def parse_cams_investor_info(page: Page) -> InvestorInfo:
     """
     Parse investor info using pymupdf tables.
 
@@ -45,9 +45,6 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
     ----------
     page : Page
         The pymupdf page object to extract information from.
-    is_cams : bool
-        Flag indicating if the document is a CAMS statement.
-        Used to swap regex patterns.
 
     Returns
     -------
@@ -57,9 +54,6 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
     email_found = False
     address_lines = []
     email = mobile = name = None
-
-    regex_string = INVESTOR_MAIL if is_cams else CAS_ID
-    statement_regex = INVESTOR_STATEMENT if is_cams else INVESTOR_STATEMENT_DP
 
     tables = page.find_tables(strategy="lines")
     first_table = tables.tables[0] if tables.tables else None
@@ -71,8 +65,8 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
             continue
         for text in cell_text.strip().split("\n"):
             text = text.strip()
-            if is_cams and not email_found:
-                if email_match := re.search(regex_string, text, re.I):
+            if not email_found:
+                if email_match := re.search(INVESTOR_MAIL, text, re.I):
                     email = email_match.group(1).strip()
                     email_found = True
                 continue
@@ -81,11 +75,45 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
                 name = text
                 continue
 
-            if re.search(statement_regex, text, re.I | re.MULTILINE) or mobile is not None:
+            if re.search(INVESTOR_STATEMENT, text, re.I | re.MULTILINE) or mobile is not None:
                 return InvestorInfo(email=email, name=name, mobile=mobile or "", address="\n".join(address_lines))
             if mobile_match := re.search(r"mobile\s*:\s*([+\d]+)(?:s|$)", text, re.I):
                 mobile = mobile_match.group(1).strip()
             address_lines.append(text)
+
+    raise CASParseError("Unable to parse investor data")
+
+
+def parse_nsdl_investor_info(page: Page) -> InvestorInfo:
+    """
+    Parse investor info from NSDL statement using pymupdf tables.
+
+    Parameters
+    ----------
+    page : Page
+        The pymupdf page object to extract information from.
+
+    Returns
+    -------
+    InvestorInfo
+        The extracted investor information.
+    """
+    statement_regex = INVESTOR_STATEMENT_DP
+    start_index = end_index = None
+    page_lines = recover_lines(page)
+    for idx, line in enumerate(page_lines):
+        if re.search(CAS_ID, line, re.I):
+            start_index = idx
+        if re.search(statement_regex, line, re.I):
+            end_index = idx
+            break
+    if start_index is not None and end_index is not None and start_index < end_index:
+        return InvestorInfo(
+            name=page_lines[start_index + 1].strip(),
+            address="\n".join([i.strip() for i in page_lines[start_index + 2 : end_index]]),
+            email="",
+            mobile="",
+        )
 
     raise CASParseError("Unable to parse investor data")
 
@@ -192,10 +220,10 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
 
         investor_info = None
         if file_type in (FileType.CAMS, FileType.KFINTECH):
-            investor_info = parse_investor_info(doc.load_page(0))
+            investor_info = parse_cams_investor_info(doc.load_page(0))
         elif file_type in (FileType.NSDL, FileType.CDSL):
             # NSDL has no information on first page
-            investor_info = parse_investor_info(doc.load_page(1), is_dp=True)
+            investor_info = parse_nsdl_investor_info(doc.load_page(1))
 
         document_data: DocumentData = []
         for page_num, page in enumerate(doc):

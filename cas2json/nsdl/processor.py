@@ -1,115 +1,139 @@
 import io
 import re
+from collections import defaultdict
 
 from cas2json import patterns
 from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS
+from cas2json.nsdl.helpers import parse_demat_accounts
 from cas2json.parser import cas_pdf_to_text
-from cas2json.types import DematAccount, DematOwner, Equity, MutualFund, NSDLCASData, StatementPeriod
-from cas2json.utils import get_statement_dates
+from cas2json.types import NSDLCASData, Scheme, SchemeType, StatementPeriod
+from cas2json.utils import format_values, get_statement_dates
+
+SCHEME_MAP = defaultdict(lambda: SchemeType.OTHER)
+SCHEME_MAP.update(
+    {
+        "Equities (E)": SchemeType.STOCK,
+        "Mutual Funds (M)": SchemeType.MUTUAL_FUND,
+        "Corporate Bonds (C)": SchemeType.CORPORATE_BOND,
+        "Preference Shares (P)": SchemeType.PREFERENCE_SHARES,
+    }
+)
 
 
-def process_nsdl_text(text):
+def process_nsdl_text(parsed_lines: list[str]) -> NSDLCASData:
     """
     Process the text version of a NSDL pdf and return the processed data.
     """
-    hdr_data = get_statement_dates(text[:1000], patterns.DEMAT_STATEMENT_PERIOD)
-    statement_period = StatementPeriod(from_=hdr_data["from"], to=hdr_data["to"])
-    accounts = re.findall(patterns.DEMAT_HEADER, text, flags=re.I | re.MULTILINE)
-    mutual_funds = re.findall(patterns.DEMAT_MF_HEADER, text, flags=re.I | re.MULTILINE)
-    demat = {}
-    for account_type, account_name, dp_id, client_id, folios, balance in accounts:
-        demat[(dp_id, client_id)] = DematAccount(
-            name=account_name,
-            folios=folios,
-            balance=balance,
-            type=account_type,
-            dp_id=dp_id,
-            client_id=client_id,
-            owners=[],
-            equities=[],
-            mutual_funds=[],
-        )
-    for num_folios, _, balance in mutual_funds:
-        demat[(None, None)] = DematAccount(
-            name="Mutual Fund Folios",
-            folios=num_folios,
-            balance=balance,
-            type="MF",
-            dp_id="",
-            client_id="",
-            owners=[],
-            equities=[],
-            mutual_funds=[],
-        )
-
+    from_data, to_date = get_statement_dates(parsed_lines, patterns.DEMAT_STATEMENT_PERIOD)
+    statement_period = StatementPeriod(from_=from_data, to=to_date)
+    demats = parse_demat_accounts(parsed_lines)
     current_demat = None
-    demat_holders = []
-    start_processing_holdings = False
-    for line in text.split("\u2029"):
-        if m := re.search(patterns.DEMAT_AC_TYPE, line, flags=re.I):
-            start_processing_holdings = True
+    schemes = []
+    scheme_type = SchemeType.OTHER
+    for line in parsed_lines:
+        # Do not parse transactions
+        if "Summary of Transaction" in line:
+            break
+
+        if "NSDL Demat Account" in line or "CDSL Demat Account" in line:
             current_demat = None
-        if not start_processing_holdings:
             continue
+
+        if dp_client_match := re.search(patterns.DP_CLIENT_ID, line, MULTI_TEXT_FLAGS):
+            dp_id, client_id = dp_client_match.groups()
+            current_demat = demats.get(dp_id + client_id, None)
+            continue
+
         if current_demat is None:
-            if re.search(patterns.DEMAT_MF_TYPE, line.strip(), flags=re.I):
-                current_demat = demat[(None, None)]
-
-            if "ACCOUNT HOLDER" in line.upper():
-                for owner, pan in re.findall(patterns.DEMAT_AC_HOLDER, line, re.I):
-                    demat_holders.append(DematOwner(owner, pan))
-
-            if m := re.search(patterns.DEMAT_DP_ID, line, flags=MULTI_TEXT_FLAGS):
-                dp_id, client_id = m.groups()
-                current_demat = demat[(dp_id, client_id)]
-                current_demat.owners = demat_holders.copy()
-                demat_holders = []
             continue
-        if "NSDL" in current_demat.type:
-            if m := re.search(patterns.NSDL_EQ, line, MULTI_TEXT_FLAGS):
-                isin, _, _, num_shares, market_value, current_value = m.groups()
-                scheme = Equity(isin=isin, num_shares=num_shares, price=market_value, value=current_value)
-                current_demat.equities.append(scheme)
-                continue
-            elif m := re.search(patterns.NSDL_MF, line, MULTI_TEXT_FLAGS):
-                isin, name, balance, nav, value = m.groups()
-                scheme = MutualFund(isin=isin, name=name, balance=balance, nav=nav, value=value)
-                current_demat.mutual_funds.append(scheme)
-                continue
-        elif "CDSL" in current_demat.type:
-            if m := re.search(patterns.NSDL_CDSL_HOLDINGS, line, MULTI_TEXT_FLAGS):
-                isin, name, balance, *_, nav, value = m.groups()
-                if isin.startswith("INF"):
-                    scheme = MutualFund(isin=isin, name=name, balance=balance, nav=nav, value=value)
-                    current_demat.mutual_funds.append(scheme)
-                elif isin.startswith("INE"):
-                    current_demat.equities.append(Equity(isin=isin, num_shares=balance, price=nav, value=value))
-                continue
-        elif current_demat.type == "MF" and (m := re.search(patterns.NSDL_MF_HOLDINGS, line, MULTI_TEXT_FLAGS)):
-            isin, _, name, _, units, _, _, nav, value, *_ = m.groups()
+
+        if any(i in line for i in SCHEME_MAP):
+            scheme_type = SCHEME_MAP[line.strip()]
+            continue
+
+        if folio_scheme_match := re.search(patterns.MF_FOLIO_SCHEMES, line, MULTI_TEXT_FLAGS):
+            isin, name, folio, units, price, invested_value, nav, value, *_ = folio_scheme_match.groups()
+            units, price, invested_value, nav, value = format_values((units, price, invested_value, nav, value))
             name = re.sub(r"\s+", " ", name).strip()
-            name = re.sub(r"[^a-zA-Z0-9_)]+$", "", name).strip()
-            scheme = MutualFund(isin=isin, name=name, balance=units, nav=nav, value=value)
-            current_demat.mutual_funds.append(scheme)
+            scheme = Scheme(
+                isin=isin,
+                units=units,
+                nav=nav,
+                market_value=value,
+                scheme_type=SchemeType.MUTUAL_FUND,
+                cost=price,
+                scheme_name=name,
+                invested_value=invested_value,
+                folio=folio,
+            )
+            schemes.append(scheme)
+            continue
 
-    cas_data = NSDLCASData(
-        statement_period=statement_period,
-        accounts=list(demat.values()),
-    )
+        if current_demat.ac_type == "CDSL" and (
+            cdsl_scheme_match := re.search(patterns.CDSL_SCHEME, line, MULTI_TEXT_FLAGS)
+        ):
+            isin, name, units, _, _, nav, value = cdsl_scheme_match.groups()
+            units, nav, value = format_values((units, nav, value))
+            name = re.sub(r"\s+", " ", name).strip()
+            scheme = Scheme(
+                isin=isin,
+                scheme_name=name,
+                units=units,
+                nav=nav,
+                market_value=value,
+                invested_value=None,
+                cost=None,
+                scheme_type=scheme_type,
+                demat_number=current_demat.dp_id + current_demat.client_id,
+            )
+            schemes.append(scheme)
 
-    return cas_data
+        if current_demat.ac_type == "NSDL" and (
+            nsdl_scheme_match := re.search(patterns.NSDL_SCHEME, line, MULTI_TEXT_FLAGS)
+        ):
+            isin, name, price, units, nav, value = nsdl_scheme_match.groups()
+            price, units, nav, value = format_values((price, units, nav, value))
+            # TODO: name are mostly split into lines but there are cases of page breaks and thus there
+            # will be lots of validations and checks to do to parse correct name
+            name = re.sub(r"\s+", " ", name).strip()
+            scheme = Scheme(
+                isin=isin,
+                scheme_name=name,
+                units=units,
+                cost=price,
+                nav=nav,
+                market_value=value,
+                invested_value=price * units if price and units else None,
+                scheme_type=scheme_type,
+                demat_number=current_demat.dp_id + current_demat.client_id,
+            )
+            schemes.append(scheme)
+            continue
+
+    return NSDLCASData(statement_period=statement_period, accounts=list(demats.values()), schemes=schemes)
 
 
 def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> NSDLCASData:
+    """
+    Parse NSDL pdf and returns processed data.
+
+    Parameters
+    ----------
+    filename : str | io.IOBase
+        The path to the PDF file or a file-like object.
+    password : str
+        The password to unlock the PDF file.
+
+    Returns
+    -------
+    Parsed NSDL CAS data
+    """
     partial_cas_data = cas_pdf_to_text(filename, password)
     if partial_cas_data.file_type != FileType.NSDL:
         raise CASParseError("Not a valid NSDL file")
-    processed_data = process_nsdl_text("\u2029".join(partial_cas_data.lines))
-    return NSDLCASData(
-        statement_period=processed_data.statement_period,
-        accounts=processed_data.accounts,
-        investor_info=partial_cas_data.investor_info,
-        file_type=partial_cas_data.file_type,
-    )
+    processed_data = process_nsdl_text(partial_cas_data.lines)
+    processed_data.file_type = partial_cas_data.file_type
+    processed_data.investor_info = partial_cas_data.investor_info
+    return processed_data

@@ -20,3 +20,7 @@ def formatINR(value: str | None) -> Decimal | None:
     if isinstance(value, str):
         return Decimal(value.replace(",", "_").replace("(", "-").replace(")", ""))
     return None
+
+
+def format_values(values: list[str | None]) -> list[Decimal | None]:
+    return [formatINR(value) for value in values]
