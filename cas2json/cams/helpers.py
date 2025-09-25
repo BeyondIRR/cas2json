@@ -1,13 +1,19 @@
+import logging
 import re
 from decimal import Decimal
 
 from dateutil import parser as date_parser
+from pymupdf import Rect
 
 from cas2json import patterns
-from cas2json.enums import CASFileType, TransactionType
+from cas2json.constants import MISCELLANEOUS_KEYWORDS
+from cas2json.enums import TransactionType
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
 from cas2json.types import TransactionData
 from cas2json.utils import formatINR
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def get_transaction_type(description: str, units: Decimal | None) -> tuple[TransactionType, Decimal | None]:
@@ -54,31 +60,37 @@ def get_transaction_type(description: str, units: Decimal | None) -> tuple[Trans
             return (TransactionType.SWITCH_OUT_MERGER if "merger" in description else TransactionType.SWITCH_OUT, None)
         return (TransactionType.REDEMPTION, None)
 
-    print("Warning: Error identifying transaction. Please report the issue with the transaction description")
-    print(f"Txn description: {description} :: Units: {units}")
+    for keyword in MISCELLANEOUS_KEYWORDS:
+        if keyword in description:
+            return (TransactionType.MISC, None)
+
+    logger.warning("Error identifying transaction. Please report the issue with the transaction description")
+    logger.info(f"Txn description: {description} :: Units: {units}")
     return (TransactionType.UNKNOWN, None)
 
 
-def get_transaction_values(values: str) -> tuple[str | None, str | None, str | None, str | None]:
+def get_transaction_values(
+    values: str, word_rects: list[tuple[Rect, str]], headers: dict[str, Rect]
+) -> tuple[str | None, str | None, str | None, str | None]:
     """
-    Extract transaction values in the order of amount, units, nav, and balance from the given string.
+    Extract transaction values in the order of amount, units, nav, and balance (in this order) from the given string.
     """
-    values = re.findall(patterns.AMT, values.strip())
-    units = nav = balance = amount = None
-    if len(values) >= 4:
-        # Normal entry
-        amount, units, nav, balance, *_ = values
-    elif len(values) == 3:
-        # Zero unit entry
-        amount, nav, balance = values
-        units = "0.000"
-    elif len(values) == 2:
-        # Segregated Portfolio Entries
-        units, balance = values
-    elif len(values) == 1:
-        # Tax entries
-        amount = values[0]
-    return amount, units, nav, balance
+
+    def formatString(s: str) -> str:
+        return s.replace("(", "").replace(")", "").strip()
+
+    txn_values = {"amount": None, "units": None, "nav": None, "balance": None}
+    for val in values:
+        val_rects = [(w[0], idx) for idx, w in enumerate(word_rects) if formatString(w[1]) == formatString(val)]
+        if not val_rects:
+            continue
+        val_rect, idx = val_rects[0]
+        # Remove to avoid matching again
+        word_rects.pop(idx)
+        for key, header_rect in headers.items():
+            if header_rect and val_rect.x0 >= header_rect.x0 - 20 and val_rect.x1 <= header_rect.x1 + 5:
+                txn_values[key] = val
+    return txn_values["amount"], txn_values["units"], txn_values["nav"], txn_values["balance"]
 
 
 def get_parsed_scheme_name(scheme: str) -> str:
@@ -88,19 +100,7 @@ def get_parsed_scheme_name(scheme: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_)]+$", "", scheme).strip()
 
 
-def detect_cas_type(parsed_lines: list[str]) -> CASFileType:
-    """Detect the type of CAS statement (detailed or summary) from the parsed lines."""
-    text = "\u2029".join(parsed_lines)
-    if m := re.search(patterns.CAS_TYPE, text, MULTI_TEXT_FLAGS):
-        match = m.group(1).lower().strip()
-        if match == "statement":
-            return CASFileType.DETAILED
-        elif match == "summary":
-            return CASFileType.SUMMARY
-    return CASFileType.UNKNOWN
-
-
-def parse_transaction(line: str) -> list[TransactionData]:
+def parse_transaction(line: str, word_rects: list[tuple[Rect, str]], headers: dict[str, Rect]) -> list[TransactionData]:
     """
     Parse a transaction line and return a list of TransactionData objects.
     """
@@ -117,7 +117,13 @@ def parse_transaction(line: str) -> list[TransactionData]:
         if not description_match:
             continue
         description, values, *_ = description_match.groups()
-        amount, units, nav, balance = get_transaction_values(values)
+        values = re.findall(patterns.AMT, values.strip())
+        units = nav = balance = amount = None
+        if len(values) >= 4:
+            # Normal entry
+            amount, units, nav, balance, *_ = values
+        else:
+            amount, units, nav, balance = get_transaction_values(values, word_rects, headers)
         description = description.strip()
         units = formatINR(units)
         txn_type, dividend_rate = get_transaction_type(description, units)
@@ -126,7 +132,7 @@ def parse_transaction(line: str) -> list[TransactionData]:
                 date=date_parser.parse(date).date(),
                 description=description,
                 type=txn_type.name,
-                amount=formatINR(amount),
+                amount=formatINR(amount, negative=False),  # Always consider positive and handle via type
                 units=units,
                 nav=formatINR(nav),
                 balance=formatINR(balance),

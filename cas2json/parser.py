@@ -5,8 +5,9 @@ from pymupdf import TEXTFLAGS_TEXT, Document, Page, Rect
 
 from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError, IncorrectPasswordError
-from cas2json.patterns import CAS_ID, INVESTOR_MAIL, INVESTOR_STATEMENT, INVESTOR_STATEMENT_DP
-from cas2json.types import InvestorInfo, PartialCASData
+from cas2json.flags import MULTI_TEXT_FLAGS
+from cas2json.patterns import CAS_ID, CAS_TYPE, INVESTOR_MAIL, INVESTOR_STATEMENT, INVESTOR_STATEMENT_DP
+from cas2json.types import FileVersion, InvestorInfo, LineData, PageData, PartialCASData
 
 
 def parse_file_type(page_blocks: list[tuple]) -> FileType:
@@ -22,6 +23,18 @@ def parse_file_type(page_blocks: list[tuple]) -> FileType:
         elif "Central Depository Services (India) Limited" in block_text:
             return FileType.CDSL
     return FileType.UNKNOWN
+
+
+def parse_file_version(page_blocks: list[tuple]) -> FileVersion:
+    """Detect the type of CAS statement (detailed or summary) from the parsed lines."""
+    for block in page_blocks:
+        if m := re.search(CAS_TYPE, block[4].strip(), MULTI_TEXT_FLAGS):
+            match = m.group(1).lower().strip()
+            if match == "statement":
+                return FileVersion.DETAILED
+            elif match == "summary":
+                return FileVersion.SUMMARY
+    return FileVersion.UNKNOWN
 
 
 def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
@@ -77,7 +90,7 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
     raise CASParseError("Unable to parse investor data")
 
 
-def recover_lines(page: Page, tolerance: int = 3, vertical_factor: int = 4) -> list[str]:
+def recover_lines(words: list[tuple[Rect, str]], tolerance: int = 3, vertical_factor: int = 4) -> LineData:
     """
     Reconstitute text lines on the page by using the coordinates of the
     single words.
@@ -95,14 +108,10 @@ def recover_lines(page: Page, tolerance: int = 3, vertical_factor: int = 4) -> l
 
     Returns
     -------
-    list[str]
-        A list of reconstituted text lines.
+    LineData
+        A generator list containing reconstituted text lines along with their word positions.
     """
     # flags are important as they control the extraction behavior like keep "hidden text" or not
-    words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
-    if not words:
-        return []
-
     lines = []
     line = [words[0]]  # current line
     lrect = words[0][0]  # the line's rectangle
@@ -119,19 +128,34 @@ def recover_lines(page: Page, tolerance: int = 3, vertical_factor: int = 4) -> l
             # output current line and re-initialize
             # note that we sort the words in current line first
             ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
-            lines.append((lrect, ltext))
+            word_pos = [(w[0], w[1]) for w in sorted(line, key=lambda w: w[0].x0)]
+            lines.append((ltext, lrect, word_pos))
             line = [(wr, text)]
             lrect = wr
 
     # also append last unfinished line
     ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
-    lines.append((lrect, ltext))
+    word_pos = [(w[0], w[1]) for w in sorted(line, key=lambda w: w[0].x0)]
+    lines.append((ltext, lrect, word_pos))
 
     # sort all lines vertically
-    lines.sort(key=lambda x: (x[0].y1))
+    lines.sort(key=lambda x: (x[1].y1))
 
-    # Return list of line texts
-    return [ltext for _, ltext in lines]
+    for ltext, _, word_pos in lines:
+        yield ltext, word_pos
+
+
+def get_header_positions(words: list[tuple[Rect, str]]) -> dict[str, Rect | None]:
+    """Get the positions of the header elements on the page."""
+    headers = {"amount": r"Amount$", "units": r"Units$", "nav": r"NAV$", "balance": r"Balance$"}
+    positions = {}
+    for header, header_regex in headers.items():
+        matches = [w for w in words if re.search(header_regex, w[1], re.I)]
+        if not matches:
+            continue
+        matches = sorted(matches, key=lambda x: x[0].y0)
+        positions[header] = matches[0][0] if matches else None
+    return positions
 
 
 def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
@@ -169,6 +193,7 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
 
         first_page_blocks = doc.get_page_text(pno=0, flags=TEXTFLAGS_TEXT, sort=True, option="blocks")
         file_type = parse_file_type(first_page_blocks)
+        file_version = parse_file_version(first_page_blocks)
 
         investor_info = None
         if file_type in (FileType.CAMS, FileType.KFINTECH):
@@ -177,11 +202,14 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
             # NSDL has no information on first page
             investor_info = parse_investor_info(doc.load_page(1), is_dp=True)
 
-        lines = []
+        data: PageData = {}
         for page_num, page in enumerate(doc):
             if file_type == FileType.NSDL and page_num == 0:
                 # No useful data in first page of NSDL doc
                 continue
-            lines.extend(recover_lines(page))
+            words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
+            if not words:
+                continue
+            data[page_num] = {"lines_data": recover_lines(words), "header_positions": get_header_positions(words)}
 
-        return PartialCASData(file_type=file_type, investor_info=investor_info, lines=lines)
+        return PartialCASData(file_type=file_type, investor_info=investor_info, data=data, file_version=file_version)

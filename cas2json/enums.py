@@ -1,4 +1,4 @@
-from enum import StrEnum, auto
+from enum import Enum, StrEnum, auto
 
 
 class CustomStrEnum(StrEnum):
@@ -19,7 +19,7 @@ class FileType(CustomStrEnum):
     NSDL = auto()
 
 
-class CASFileType(CustomStrEnum):
+class FileVersion(CustomStrEnum):
     """Enum for CAS file type"""
 
     UNKNOWN = auto()
@@ -33,6 +33,8 @@ class TransactionType(CustomStrEnum):
     REDEMPTION = auto()
     DIVIDEND_PAYOUT = auto()
     DIVIDEND_REINVEST = auto()
+    TRANSFER_IN = auto()
+    TRANSFER_OUT = auto()
     SWITCH_IN = auto()
     SWITCH_IN_MERGER = auto()
     SWITCH_OUT = auto()
@@ -44,3 +46,10 @@ class TransactionType(CustomStrEnum):
     MISC = auto()
     UNKNOWN = auto()
     REVERSAL = auto()
+
+
+class CashFlow(Enum):
+    """Specify type of flow to consider in calculations. Signs are in reference to holdings."""
+
+    ADD = 1
+    SUBTRACT = -1
