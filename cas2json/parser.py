@@ -109,7 +109,7 @@ def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: in
     Returns
     -------
     LineData
-        A generator list containing reconstituted text lines along with their word positions.
+        Generator of reconstituted text lines along with their word positions.
     """
     # flags are important as they control the extraction behavior like keep "hidden text" or not
     lines: list[tuple[str, Rect, list[WordData]]] = []
@@ -128,14 +128,14 @@ def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: in
             # output current line and re-initialize
             # note that we sort the words in current line first
             ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
-            word_pos = [(w[0], w[1]) for w in sorted(line, key=lambda w: w[0].x0)]
+            word_pos = sorted(line, key=lambda w: w[0].x0)
             lines.append((ltext, lrect, word_pos))
             line = [(wr, text)]
             lrect = wr
 
     # also append last unfinished line
     ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
-    word_pos = [(w[0], w[1]) for w in sorted(line, key=lambda w: w[0].x0)]
+    word_pos = sorted(line, key=lambda w: w[0].x0)
     lines.append((ltext, lrect, word_pos))
 
     for ltext, _, word_pos in sorted(lines, key=lambda x: (x[1].y1)):
@@ -168,7 +168,7 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
 
     Returns
     -------
-    PartialCasData which includes investor info, file type and parsed text lines (as much as close to original layout)
+    PartialCasData which includes investor info, file type, version and parsed text lines (as much as close to original layout)
     """
     if isinstance(filename, str):
         fp = open(filename, "rb")  # NOQA

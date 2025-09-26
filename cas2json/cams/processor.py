@@ -25,12 +25,27 @@ class CASProcessor:
 
     @staticmethod
     def extract_amc(line: str) -> str | None:
+        """
+        Extract amc name from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "Franklin Templeton Mutual Fund"
+        - "HDFC Mutual Fund"
+        """
         if amc_match := re.search(patterns.AMC, line, TEXT_FLAGS):
             return amc_match.group(0)
         return None
 
     @staticmethod
     def extract_folio_pan(line: str, current_folio: str | None) -> tuple[str | None, str | None]:
+        """
+        Extract folio and PAN from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "Folio No: 1122334455 / 12 PAN: ABCDE1234F KYC: OK PAN: OK"
+        """
         if folio_match := re.search(patterns.FOLIO, line):
             folio = folio_match.group(1).strip()
             pan_match = re.search(patterns.PAN, line)
@@ -40,6 +55,16 @@ class CASProcessor:
 
     @staticmethod
     def extract_scheme_details(line: str) -> tuple[str, str, str, str] | None:
+        """
+        Extract scheme details from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "HINFG-HDFC Infrastructure Fund - Regular Plan - Growth (Non-Demat) - ISIN: INF179K01GF8(Advisor: ARN-0845) Registrar : CAMS"
+
+        - "FTI219-Franklin India Small Cap Fund - Growth (erstwhile Franklin India Smaller Companies Fund - Growth) (Non-Demat) -
+          ISIN: INF090I01569 Registrar : CAMS (Advisor: ARN-0845)"
+        """
         if scheme_match := re.search(patterns.SCHEME, line, MULTI_TEXT_FLAGS):
             scheme_name = get_parsed_scheme_name(scheme_match.group("name"))
             # Split Scheme details becomes a bit malformed having "Registrar : CAMS" in between, hence
@@ -58,23 +83,53 @@ class CASProcessor:
 
     @staticmethod
     def extract_registrar(line: str) -> str | None:
+        """
+        Extract registrar name from the line if present.
+
+        Supported line formats
+        ----------------------
+        - The following statement can be present as part of any line or can be independent line:
+
+          "Registrar : CAMS"
+        """
         if registrar_match := re.search(patterns.REGISTRAR, line, TEXT_FLAGS):
             return registrar_match.group(1).strip()
         return None
 
     @staticmethod
     def extract_nominees(line: str) -> list[str]:
+        """
+        Extract nominee names from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "Nominee 1: Joe Doe Nominee 2: Jane Doe Nominee 3: John Doe"
+        """
         nominee_match = re.findall(patterns.NOMINEE, line, MULTI_TEXT_FLAGS)
         return [nominee.strip() for nominee in nominee_match if nominee.strip()]
 
     @staticmethod
     def extract_open_units(line: str) -> Decimal | None:
+        """
+        Extract opening unit balance from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "Opening Unit Balance: 50.166"
+        """
         if open_units_match := re.search(patterns.OPEN_UNITS, line, MULTI_TEXT_FLAGS):
             return formatINR(open_units_match.group(1))
         return None
 
     @staticmethod
     def extract_scheme_valuation(line: str, current_scheme: Scheme) -> Scheme:
+        """
+        Extract and update scheme valuation details from the line if present.
+
+        Supported line formats
+        ----------------------
+        - "Closing Unit Balance: 50.166 NAV on 20-Sep-2001: INR 112.1222 Total Cost Value: 123.12 Market Value on 20-Sep-2001: INR 110.24"
+        """
         if close_units_match := re.search(patterns.CLOSE_UNITS, line):
             current_scheme.close = formatINR(close_units_match.group(1))
 
@@ -97,6 +152,7 @@ class CASProcessor:
     ) -> list[TransactionData]:
         """
         Parse a transaction line and return a list of TransactionData objects.
+
         Parameters
         ----------
         line : str
@@ -112,6 +168,20 @@ class CASProcessor:
         -------
         list[TransactionData]
             A list of parsed transaction data (generally one, but can be more in case of multiple transactions on same line).
+
+        Supported line formats
+        ----------------------
+        - Regular transaction with all 4 values:
+
+          "25-Nov-2001 Systematic Investment Purchase -BSE Instalment No 1 9,999.50 50.166 116.6680 50.166"
+
+        - Multiple transactions on same line:
+
+          "26-Feb-2024 *** Stamp Duty *** 0.50 25-Nov-2001 Systematic Investment Purchase -BSE Instalment No 1 9,999.50 50.166 116.6680 50.166"
+
+        - Transaction with missing values (e.g. amount) (uses header positions and word positions to identify values):
+
+          "25-Nov-2001 Redemption 50.166 116.6680 50.166"
         """
 
         def normalize(s: str) -> str:
@@ -152,14 +222,14 @@ class CASProcessor:
             description = description.strip()
             units = formatINR(txn_values["units"])
             txn_type, dividend_rate = get_transaction_type(description, units)
+            # Consider positive and handle inflow/outflow based on units/transaction type
+            amount = abs(formatINR(txn_values["amount"])) if txn_values["amount"] else None
             transactions.append(
                 TransactionData(
                     date=date_parser.parse(date).date(),
                     description=description,
                     type=txn_type.name,
-                    amount=formatINR(
-                        txn_values["amount"], negative=False
-                    ),  # Always consider positive and handle via type
+                    amount=amount,
                     units=units,
                     nav=formatINR(txn_values["nav"]),
                     balance=formatINR(txn_values["balance"]),
@@ -249,9 +319,8 @@ class CASProcessor:
                     current_scheme.nominees.extend(nominees)
                     continue
 
-                if open_units := self.extract_open_units(line):
-                    current_scheme.open = open_units
-                    current_scheme.close_calculated = open_units
+                if (open_units := self.extract_open_units(line)) is not None:
+                    current_scheme.open = current_scheme.close_calculated = open_units
                     continue
 
                 if parsed_txns := self.extract_transactions(line, word_rects, headers=page_data.headers_data):

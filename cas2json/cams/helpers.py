@@ -12,7 +12,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def get_transaction_type(description: str, units: Decimal | None) -> tuple[TransactionType, Decimal | None]:
-    """Get transaction type from the description text."""
+    """Get transaction type from the description text and units."""
 
     description = description.lower()
     # Dividend
@@ -65,6 +65,7 @@ def get_transaction_type(description: str, units: Decimal | None) -> tuple[Trans
 
 
 def get_parsed_scheme_name(scheme: str) -> str:
+    """Helper to clean scheme names."""
     scheme = re.sub(r"\((formerly|erstwhile).+?\)", "", scheme, flags=TEXT_FLAGS).strip()
     scheme = re.sub(r"\((Demat|Non-Demat).*", "", scheme, flags=TEXT_FLAGS).strip()
     scheme = re.sub(r"\s+", " ", scheme).strip()

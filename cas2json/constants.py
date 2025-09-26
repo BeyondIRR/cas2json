@@ -24,4 +24,4 @@ HOLDINGS_CASHFLOW.update(
     }
 )
 
-MISCELLANEOUS_KEYWORDS = ["mobile", "address", "details", "nominee", "cancelled"]
+MISCELLANEOUS_KEYWORDS = ["mobile", "address", "details", "nominee", "change"]

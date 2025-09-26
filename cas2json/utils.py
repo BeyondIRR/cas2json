@@ -15,9 +15,8 @@ def get_statement_dates(parsed_lines: list[str], reg_exp: str) -> tuple[str | No
     raise HeaderParseError("Error parsing CAS header")
 
 
-def formatINR(value: str | None, negative=True) -> Decimal | None:
+def formatINR(value: str | None) -> Decimal | None:
     """Helper to format amount related strings to Decimal."""
     if isinstance(value, str):
-        negative_delimeter = "-" if negative else ""
-        return Decimal(value.replace(",", "_").replace("(", negative_delimeter).replace(")", ""))
+        return Decimal(value.replace(",", "_").replace("(", "-").replace(")", ""))
     return None
