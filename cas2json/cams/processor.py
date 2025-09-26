@@ -221,14 +221,14 @@ class CASProcessor:
 
             description = description.strip()
             units = formatINR(txn_values["units"])
-            txn_type, dividend_rate = get_transaction_type(description, units)
+            transaction_type, dividend_rate = get_transaction_type(description, units)
             # Consider positive and handle inflow/outflow based on units/transaction type
             amount = abs(formatINR(txn_values["amount"])) if txn_values["amount"] else None
             transactions.append(
                 TransactionData(
                     date=date_parser.parse(date).date(),
                     description=description,
-                    type=txn_type.name,
+                    type=transaction_type.name,
                     amount=amount,
                     units=units,
                     nav=formatINR(txn_values["nav"]),
@@ -239,9 +239,7 @@ class CASProcessor:
         return transactions
 
     def process_detailed_version(self, document_data: DocumentData) -> ProcessedCASData:
-        """
-        Process the parsed data of CAMS pdf and return the detailed processed data.
-        """
+        """Process the parsed data of CAMS pdf and return the detailed processed data."""
 
         def finalize_current_scheme():
             """Append current scheme to the schemes list and reset"""
@@ -336,9 +334,7 @@ class CASProcessor:
         return ProcessedCASData(statement_period=statement_period, schemes=schemes)
 
     def process_summary_version(self, document_data: DocumentData) -> ProcessedCASData:
-        """
-        Process the text version of a CAS pdf and return the summarized processed data.
-        """
+        """Process the text version of a CAS pdf and return the summarized processed data."""
 
         schemes: list[Scheme] = []
         current_folio: str | None = None

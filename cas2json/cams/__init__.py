@@ -19,10 +19,6 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=T
         The password to unlock the PDF file.
     sort_transactions : bool
         Whether to sort transactions by date and re-compute balances.
-
-    Returns
-    -------
-    Parsed CAMS or KFintech CAS data
     """
 
     partial_cas_data = cas_pdf_to_text(filename, password)

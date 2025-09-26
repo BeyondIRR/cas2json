@@ -9,6 +9,7 @@ from cas2json.constants import HOLDINGS_CASHFLOW
 from cas2json.enums import FileType, FileVersion, TransactionType
 
 WordData = tuple[Rect, str]
+DocumentData = list["PageData"]
 LineData = Generator[tuple[str, list[WordData]]]
 
 
@@ -16,9 +17,6 @@ LineData = Generator[tuple[str, list[WordData]]]
 class PageData:
     lines_data: LineData
     headers_data: dict[str, Rect]
-
-
-DocumentData = list[PageData]
 
 
 @dataclass(slots=True)

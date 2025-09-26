@@ -92,8 +92,7 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
 
 def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: int = 4) -> LineData:
     """
-    Reconstitute text lines on the page by using the coordinates of the
-    single words.
+    Reconstitute text lines on the page by using the coordinates of the single words.
 
     Based on `get_sorted_text` of pymupdf.
 
@@ -127,15 +126,15 @@ def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: in
         else:
             # output current line and re-initialize
             # note that we sort the words in current line first
-            ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
             word_pos = sorted(line, key=lambda w: w[0].x0)
+            ltext = " ".join(w[1] for w in word_pos)
             lines.append((ltext, lrect, word_pos))
             line = [(wr, text)]
             lrect = wr
 
     # also append last unfinished line
-    ltext = " ".join([w[1] for w in sorted(line, key=lambda w: w[0].x0)])
     word_pos = sorted(line, key=lambda w: w[0].x0)
+    ltext = " ".join(w[1] for w in word_pos)
     lines.append((ltext, lrect, word_pos))
 
     for ltext, _, word_pos in sorted(lines, key=lambda x: (x[1].y1)):
@@ -144,14 +143,13 @@ def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: in
 
 def get_header_positions(words: list[WordData]) -> dict[str, Rect]:
     """Get the positions of the header elements on the page."""
-    headers = {"amount": r"Amount$", "units": r"Units$", "nav": r"NAV$", "balance": r"Balance$"}
     positions = {}
-    for header, header_regex in headers.items():
+    header_patterns = ("amount", r"Amount$"), ("units", r"Units$"), ("nav", r"NAV$"), ("balance", r"Balance$")
+    for header, header_regex in header_patterns:
         matches = [w for w in words if re.search(header_regex, w[1], re.I)]
         if not matches:
             continue
-        matches = sorted(matches, key=lambda x: x[0].y0)
-        positions[header] = matches[0][0]
+        positions[header] = min(matches, key=lambda x: x[0].y0)[0]
     return positions
 
 

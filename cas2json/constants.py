@@ -2,8 +2,8 @@ from collections import defaultdict
 
 from cas2json.enums import CashFlow, TransactionType
 
-HOLDINGS_CASHFLOW = defaultdict(lambda: CashFlow.ADD)
-HOLDINGS_CASHFLOW.update(
+HOLDINGS_CASHFLOW = defaultdict(
+    lambda: CashFlow.ADD,
     {
         TransactionType.PURCHASE: CashFlow.ADD,
         TransactionType.PURCHASE_SIP: CashFlow.ADD,
@@ -21,7 +21,7 @@ HOLDINGS_CASHFLOW.update(
         TransactionType.SWITCH_OUT: CashFlow.SUBTRACT,
         TransactionType.DIVIDEND_PAYOUT: CashFlow.SUBTRACT,
         TransactionType.SWITCH_OUT_MERGER: CashFlow.SUBTRACT,
-    }
+    },
 )
 
-MISCELLANEOUS_KEYWORDS = ["mobile", "address", "details", "nominee", "change"]
+MISCELLANEOUS_KEYWORDS = ("mobile", "address", "details", "nominee", "change")

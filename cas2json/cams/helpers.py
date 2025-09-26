@@ -59,8 +59,7 @@ def get_transaction_type(description: str, units: Decimal | None) -> tuple[Trans
         if keyword in description:
             return (TransactionType.MISC, None)
 
-    logger.warning("Error identifying transaction. Please report the issue with the transaction description")
-    logger.info(f"Txn description: {description} :: Units: {units}")
+    logger.warning(f"Error identifying transaction. Description: {description} :: Units: {units}")
     return (TransactionType.UNKNOWN, None)
 
 
