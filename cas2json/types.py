@@ -8,8 +8,17 @@ from pymupdf import Rect
 from cas2json.constants import HOLDINGS_CASHFLOW
 from cas2json.enums import FileType, FileVersion, TransactionType
 
-LineData = Generator[str, list[tuple[Rect, str]], None]
-PageData = dict[int, dict[str, LineData | dict[str, Rect | None]]]
+WordData = tuple[Rect, str]
+LineData = Generator[tuple[str, list[WordData]]]
+
+
+@dataclass(slots=True, frozen=True)
+class PageData:
+    lines_data: LineData
+    headers_data: dict[str, Rect]
+
+
+DocumentData = list[PageData]
 
 
 @dataclass(slots=True)
@@ -39,7 +48,10 @@ class TransactionData:
 
     def __post_init__(self):
         if isinstance(self.amount, Decimal | float):
-            self.amount = HOLDINGS_CASHFLOW[self.type].value * self.amount
+            if self.units is None:
+                self.amount = HOLDINGS_CASHFLOW[self.type].value * self.amount
+            else:
+                self.amount = (1 if self.units > 0 else -1) * abs(self.amount)
 
 
 @dataclass(slots=True)
@@ -85,7 +97,7 @@ class PartialCASData:
 
     investor_info: InvestorInfo
     file_type: FileType
-    data: PageData
+    document_data: DocumentData
     file_version: FileVersion
 
 

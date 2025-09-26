@@ -7,7 +7,7 @@ from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError, IncorrectPasswordError
 from cas2json.flags import MULTI_TEXT_FLAGS
 from cas2json.patterns import CAS_ID, CAS_TYPE, INVESTOR_MAIL, INVESTOR_STATEMENT, INVESTOR_STATEMENT_DP
-from cas2json.types import FileVersion, InvestorInfo, LineData, PageData, PartialCASData
+from cas2json.types import DocumentData, FileVersion, InvestorInfo, LineData, PageData, PartialCASData, WordData
 
 
 def parse_file_type(page_blocks: list[tuple]) -> FileType:
@@ -90,7 +90,7 @@ def parse_investor_info(page: Page, is_cams=True) -> InvestorInfo:
     raise CASParseError("Unable to parse investor data")
 
 
-def recover_lines(words: list[tuple[Rect, str]], tolerance: int = 3, vertical_factor: int = 4) -> LineData:
+def recover_lines(words: list[WordData], tolerance: int = 3, vertical_factor: int = 4) -> LineData:
     """
     Reconstitute text lines on the page by using the coordinates of the
     single words.
@@ -112,9 +112,9 @@ def recover_lines(words: list[tuple[Rect, str]], tolerance: int = 3, vertical_fa
         A generator list containing reconstituted text lines along with their word positions.
     """
     # flags are important as they control the extraction behavior like keep "hidden text" or not
-    lines = []
-    line = [words[0]]  # current line
-    lrect = words[0][0]  # the line's rectangle
+    lines: list[tuple[str, Rect, list[WordData]]] = []
+    line: list[WordData] = [words[0]]  # current line
+    lrect: Rect = words[0][0]  # the line's rectangle
 
     for wr, text in words[1:]:
         # ignore vertical elements
@@ -138,14 +138,11 @@ def recover_lines(words: list[tuple[Rect, str]], tolerance: int = 3, vertical_fa
     word_pos = [(w[0], w[1]) for w in sorted(line, key=lambda w: w[0].x0)]
     lines.append((ltext, lrect, word_pos))
 
-    # sort all lines vertically
-    lines.sort(key=lambda x: (x[1].y1))
-
-    for ltext, _, word_pos in lines:
+    for ltext, _, word_pos in sorted(lines, key=lambda x: (x[1].y1)):
         yield ltext, word_pos
 
 
-def get_header_positions(words: list[tuple[Rect, str]]) -> dict[str, Rect | None]:
+def get_header_positions(words: list[WordData]) -> dict[str, Rect]:
     """Get the positions of the header elements on the page."""
     headers = {"amount": r"Amount$", "units": r"Units$", "nav": r"NAV$", "balance": r"Balance$"}
     positions = {}
@@ -154,7 +151,7 @@ def get_header_positions(words: list[tuple[Rect, str]]) -> dict[str, Rect | None
         if not matches:
             continue
         matches = sorted(matches, key=lambda x: x[0].y0)
-        positions[header] = matches[0][0] if matches else None
+        positions[header] = matches[0][0]
     return positions
 
 
@@ -202,7 +199,7 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
             # NSDL has no information on first page
             investor_info = parse_investor_info(doc.load_page(1), is_dp=True)
 
-        data: PageData = {}
+        document_data: DocumentData = []
         for page_num, page in enumerate(doc):
             if file_type == FileType.NSDL and page_num == 0:
                 # No useful data in first page of NSDL doc
@@ -210,6 +207,9 @@ def cas_pdf_to_text(filename: str | io.IOBase, password: str) -> PartialCASData:
             words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
             if not words:
                 continue
-            data[page_num] = {"lines_data": recover_lines(words), "header_positions": get_header_positions(words)}
 
-        return PartialCASData(file_type=file_type, investor_info=investor_info, data=data, file_version=file_version)
+            document_data.append(PageData(lines_data=recover_lines(words), headers_data=get_header_positions(words)))
+
+        return PartialCASData(
+            file_type=file_type, investor_info=investor_info, document_data=document_data, file_version=file_version
+        )
