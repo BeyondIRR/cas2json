@@ -100,7 +100,8 @@ def parse_nsdl_investor_info(page: Page) -> InvestorInfo:
     """
     statement_regex = INVESTOR_STATEMENT_DP
     start_index = end_index = None
-    page_lines = recover_lines(page)
+    words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
+    page_lines = [line for line, _ in recover_lines(words)]
     for idx, line in enumerate(page_lines):
         if re.search(CAS_ID, line, re.I):
             start_index = idx

@@ -91,7 +91,7 @@ class Scheme:
 class CASData:
     """CAS Parser return data type."""
 
-    statement_period: StatementPeriod
+    statement_period: StatementPeriod | None
     schemes: list[Scheme]
     investor_info: InvestorInfo
     file_type: FileType
@@ -106,12 +106,6 @@ class PartialCASData:
     file_type: FileType
     document_data: DocumentData
     file_version: FileVersion
-
-
-@dataclass(slots=True)
-class ProcessedCASData:
-    schemes: list[Scheme]
-    statement_period: StatementPeriod | None
 
 
 @dataclass(slots=True)

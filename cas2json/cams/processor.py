@@ -9,8 +9,8 @@ from cas2json.cams.helpers import get_parsed_scheme_name, get_transaction_type
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
 from cas2json.types import (
+    CASData,
     DocumentData,
-    ProcessedCASData,
     Scheme,
     SchemeExtras,
     StatementPeriod,
@@ -56,7 +56,7 @@ class CASProcessor:
     @staticmethod
     def extract_scheme_details(line: str) -> tuple[str, str, str, str] | None:
         """
-        Extract scheme details from the line if present.
+        Extract scheme details from the line if present in order of <scheme_name>, <isin>, <rta_code>, <advisor>.
 
         Supported line formats
         ----------------------
@@ -236,7 +236,7 @@ class CASProcessor:
             )
         return transactions
 
-    def process_detailed_version(self, document_data: DocumentData) -> ProcessedCASData:
+    def process_detailed_version(self, document_data: DocumentData) -> CASData:
         """Process the parsed data of CAMS pdf and return the detailed processed data."""
 
         def finalize_current_scheme():
@@ -332,9 +332,9 @@ class CASProcessor:
 
         finalize_current_scheme()
 
-        return ProcessedCASData(statement_period=statement_period, schemes=schemes)
+        return CASData(statement_period=statement_period, schemes=schemes)
 
-    def process_summary_version(self, document_data: DocumentData) -> ProcessedCASData:
+    def process_summary_version(self, document_data: DocumentData) -> CASData:
         """Process the text version of a CAS pdf and return the summarized processed data."""
 
         schemes: list[Scheme] = []
@@ -384,4 +384,4 @@ class CASProcessor:
                 if current_scheme:
                     current_scheme.scheme_name = f"{current_scheme.scheme_name} {line.strip()}"
 
-        return ProcessedCASData(statement_period=statement_period, schemes=schemes)
+        return CASData(statement_period=statement_period, schemes=schemes)
