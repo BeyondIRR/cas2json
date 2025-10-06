@@ -53,3 +53,11 @@ class CashFlow(Enum):
 
     ADD = 1
     SUBTRACT = -1
+
+
+class SchemeType(CustomStrEnum):
+    STOCK = auto()
+    MUTUAL_FUND = auto()
+    CORPORATE_BOND = auto()
+    PREFERENCE_SHARES = auto()
+    OTHER = auto()

@@ -43,10 +43,7 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=T
                     transaction.balance = balance
                 scheme.transactions = sorted_transactions
 
-    return CASData(
-        statement_period=processed_data.statement_period,
-        schemes=processed_data.schemes,
-        file_version=partial_cas_data.file_version,
-        investor_info=partial_cas_data.investor_info,
-        file_type=partial_cas_data.file_type,
-    )
+    processed_data.investor_info = partial_cas_data.investor_info
+    processed_data.file_type = partial_cas_data.file_type
+    processed_data.file_version = partial_cas_data.file_version
+    return processed_data
