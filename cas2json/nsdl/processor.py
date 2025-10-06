@@ -233,31 +233,26 @@ class NSDLProcessor:
 
                 if "NSDL Demat Account" in line or "CDSL Demat Account" in line:
                     current_demat = None
-                    continue
 
-                if dp_client_ids := self.extract_dp_client_id(line):
+                elif dp_client_ids := self.extract_dp_client_id(line):
                     current_demat = demats.get(dp_client_ids[0] + dp_client_ids[1], None)
-                    continue
 
                 if current_demat is None:
                     continue
 
-                if any(i in line for i in SCHEME_MAP):
+                elif any(i in line for i in SCHEME_MAP):
                     scheme_type = SCHEME_MAP[line.strip()]
-                    continue
 
-                if mf_scheme := self.extract_mf_scheme(line):
+                elif mf_scheme := self.extract_mf_scheme(line):
                     schemes.append(mf_scheme)
-                    continue
 
-                if current_demat.ac_type == "CDSL" and (cdsl_scheme := self.extract_cdsl_scheme(line)):
+                elif current_demat.ac_type == "CDSL" and (cdsl_scheme := self.extract_cdsl_scheme(line)):
                     cdsl_scheme.scheme_type = scheme_type
                     cdsl_scheme.dp_id = current_demat.dp_id
                     cdsl_scheme.client_id = current_demat.client_id
                     schemes.append(cdsl_scheme)
-                    continue
 
-                if current_demat.ac_type == "NSDL" and (nsdl_scheme := self.extract_nsdl_scheme(line)):
+                elif current_demat.ac_type == "NSDL" and (nsdl_scheme := self.extract_nsdl_scheme(line)):
                     nsdl_scheme.scheme_type = scheme_type
                     nsdl_scheme.dp_id = current_demat.dp_id
                     nsdl_scheme.client_id = current_demat.client_id

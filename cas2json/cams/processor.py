@@ -293,7 +293,7 @@ class CASProcessor:
                         advisor=advisor,
                         rta_code=rta_code,
                         opening_units=Decimal("0.0"),
-                        closing_units=Decimal("0.0"),
+                        calculated_units=Decimal("0.0"),
                     )
                     if current_registrar:
                         current_scheme.rta = current_registrar
@@ -315,13 +315,13 @@ class CASProcessor:
                     continue
 
                 if (open_units := self.extract_open_units(line)) is not None:
-                    current_scheme.opening_units = current_scheme.closing_units = open_units
+                    current_scheme.opening_units = current_scheme.calculated_units = open_units
                     continue
 
                 if parsed_txns := self.extract_transactions(line, word_rects, headers=page_data.headers_data):
                     for txn in parsed_txns:
                         if txn.units is not None:
-                            current_scheme.closing_units += txn.units
+                            current_scheme.calculated_units += txn.units
                     current_scheme.transactions.extend(parsed_txns)
 
                 current_scheme = self.extract_scheme_valuation(line, current_scheme)
