@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from cas2json import patterns
 from cas2json.flags import MULTI_TEXT_FLAGS
-from cas2json.types import DematAccount, DematOwner, DocumentData, NSDLCASData, Scheme, SchemeType, StatementPeriod
+from cas2json.types import DematAccount, DematOwner, DocumentData, NSDLCASData, NSDLScheme, SchemeType, StatementPeriod
 from cas2json.utils import format_values, get_statement_dates
 
 SCHEME_MAP = defaultdict(
@@ -79,7 +79,7 @@ class NSDLProcessor:
         return None
 
     @staticmethod
-    def extract_mf_scheme(line: str) -> Scheme | None:
+    def extract_mf_scheme(line: str) -> NSDLScheme | None:
         """
         Extract Scheme details for MF Folio from the line if present.
         `Annualized Return (%)` is not always available making pattern match fail hence, is not parsed.
@@ -96,7 +96,7 @@ class NSDLProcessor:
             isin, name, folio, units, price, invested_value, nav, value, *_ = scheme_match.groups()
             units, price, invested_value, nav, value = format_values((units, price, invested_value, nav, value))
             name = re.sub(r"\s+", " ", name).strip()
-            return Scheme(
+            return NSDLScheme(
                 isin=isin,
                 units=units,
                 nav=nav,
@@ -110,7 +110,7 @@ class NSDLProcessor:
         return None
 
     @staticmethod
-    def extract_cdsl_scheme(line: str) -> Scheme | None:
+    def extract_cdsl_scheme(line: str) -> NSDLScheme | None:
         """
         Extract Scheme details for CDSL demat account from the line if present.
 
@@ -126,11 +126,11 @@ class NSDLProcessor:
             isin, name, units, _, _, nav, value = scheme_match.groups()
             units, nav, value = format_values((units, nav, value))
             name = re.sub(r"\s+", " ", name).strip()
-            return Scheme(isin=isin, scheme_name=name, units=units, nav=nav, market_value=value, cost=None)
+            return NSDLScheme(isin=isin, scheme_name=name, units=units, nav=nav, market_value=value, cost=None)
         return None
 
     @staticmethod
-    def extract_nsdl_scheme(line: str) -> Scheme | None:
+    def extract_nsdl_scheme(line: str) -> NSDLScheme | None:
         """
         Extract Scheme details for NSDL demat account from the line if present.
 
@@ -148,7 +148,7 @@ class NSDLProcessor:
             # TODO: name are mostly split into lines but there are cases of page breaks and thus there
             # will be lots of validations and checks to do to parse correct name
             name = re.sub(r"\s+", " ", name).strip()
-            return Scheme(
+            return NSDLScheme(
                 isin=isin,
                 scheme_name=name,
                 units=units,
@@ -165,7 +165,7 @@ class NSDLProcessor:
         """
         statement_period: StatementPeriod | None = None
         current_demat: DematAccount | None = None
-        schemes: list[Scheme] = []
+        schemes: list[NSDLScheme] = []
         scheme_type: SchemeType = SchemeType.OTHER
         holders: list[DematOwner] = []
         demats: dict[str, DematAccount] = {}
@@ -252,13 +252,15 @@ class NSDLProcessor:
 
                 if current_demat.ac_type == "CDSL" and (cdsl_scheme := self.extract_cdsl_scheme(line)):
                     cdsl_scheme.scheme_type = scheme_type
-                    cdsl_scheme.demat_number = current_demat.dp_id + current_demat.client_id
+                    cdsl_scheme.dp_id = current_demat.dp_id
+                    cdsl_scheme.client_id = current_demat.client_id
                     schemes.append(cdsl_scheme)
                     continue
 
                 if current_demat.ac_type == "NSDL" and (nsdl_scheme := self.extract_nsdl_scheme(line)):
                     nsdl_scheme.scheme_type = scheme_type
-                    nsdl_scheme.demat_number = current_demat.dp_id + current_demat.client_id
+                    nsdl_scheme.dp_id = current_demat.dp_id
+                    nsdl_scheme.client_id = current_demat.client_id
                     schemes.append(nsdl_scheme)
 
         return NSDLCASData(statement_period=statement_period, accounts=list(demats.values()), schemes=schemes)

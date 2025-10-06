@@ -53,7 +53,29 @@ class TransactionData:
 
 
 @dataclass(slots=True)
-class SchemeExtras:
+class Scheme:
+    isin: str
+    scheme_name: str
+    nav: Decimal | float
+    units: Decimal | float
+    cost: Decimal | float | None
+    folio: str | None = None
+    market_value: Decimal | float | None = None
+    invested_value: Decimal | float | None = None
+    scheme_type: SchemeType = SchemeType.OTHER
+
+    def __post_init__(self):
+        if not self.invested_value and self.cost and self.units:
+            self.invested_value = self.cost * self.units
+        if not self.market_value and self.nav and self.units:
+            self.market_value = self.nav * self.units
+
+
+@dataclass(slots=True)
+class CAMSScheme(Scheme):
+    pan: str | None = None
+    nominees: list[str] = field(default_factory=list)
+    transactions: list[TransactionData] = field(default_factory=list)
     advisor: str | None = None
     amc: str | None = None
     rta: str | None = None
@@ -63,39 +85,14 @@ class SchemeExtras:
 
 
 @dataclass(slots=True)
-class Scheme:
-    isin: str
-    scheme_name: str
-    nav: Decimal | float
-    units: Decimal | float
-    cost: Decimal | float | None
-    pan: str | None = None
-    folio: str | None = None
-    demat_number: str | None = None
-    market_value: Decimal | float | None = None
-    invested_value: Decimal | float | None = None
-    scheme_type: SchemeType = SchemeType.OTHER
-    nominees: list[str] = field(default_factory=list)
-    transactions: list[TransactionData] = field(default_factory=list)
-    # TODO: keep empty dictionary?
-    extras: SchemeExtras = field(default_factory=SchemeExtras)
-
-    def __post__init__(self):
-        if not self.invested_value and self.cost and self.units:
-            self.invested_value = self.cost * self.units
-        if not self.market_value and self.nav and self.units:
-            self.market_value = self.nav * self.units
-
-
-@dataclass(slots=True)
 class CASData:
     """CAS Parser return data type."""
 
     statement_period: StatementPeriod | None
     schemes: list[Scheme]
-    investor_info: InvestorInfo
-    file_type: FileType
-    file_version: FileVersion
+    investor_info: InvestorInfo | None = None
+    file_type: FileType = FileType.UNKNOWN
+    file_version: FileVersion = FileVersion.UNKNOWN
 
 
 @dataclass(slots=True)
@@ -133,3 +130,9 @@ class NSDLCASData:
     statement_period: StatementPeriod
     investor_info: InvestorInfo | None = None
     file_type: FileType | None = None
+
+
+@dataclass(slots=True)
+class NSDLScheme(Scheme):
+    dp_id: str | None = ""
+    client_id: str | None = ""

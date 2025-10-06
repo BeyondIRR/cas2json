@@ -9,10 +9,9 @@ from cas2json.cams.helpers import get_parsed_scheme_name, get_transaction_type
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
 from cas2json.types import (
+    CAMSScheme,
     CASData,
     DocumentData,
-    Scheme,
-    SchemeExtras,
     StatementPeriod,
     TransactionData,
     WordData,
@@ -122,7 +121,7 @@ class CASProcessor:
         return None
 
     @staticmethod
-    def extract_scheme_valuation(line: str, current_scheme: Scheme) -> Scheme:
+    def extract_scheme_valuation(line: str, current_scheme: CAMSScheme) -> CAMSScheme:
         """
         Extract and update scheme valuation details from the line if present.
 
@@ -131,10 +130,11 @@ class CASProcessor:
         - "Closing Unit Balance: 50.166 NAV on 20-Sep-2001: INR 112.1222 Total Cost Value: 123.12 Market Value on 20-Sep-2001: INR 110.24"
         """
         if close_units_match := re.search(patterns.CLOSE_UNITS, line):
-            current_scheme.extras.closing_units = formatINR(close_units_match.group(1))
+            current_scheme.units = formatINR(close_units_match.group(1))
 
         if cost_match := re.search(patterns.COST, line, re.I):
             current_scheme.cost = formatINR(cost_match.group(1))
+            current_scheme.invested_value = current_scheme.cost * current_scheme.units if current_scheme.units else None
 
         if valuation_match := re.search(patterns.VALUATION, line, re.I):
             current_scheme.market_value = formatINR(valuation_match.group(2))
@@ -246,10 +246,10 @@ class CASProcessor:
                 schemes.append(current_scheme)
                 current_scheme = None
 
-        schemes: list[Scheme] = []
+        schemes: list[CAMSScheme] = []
         statement_period: StatementPeriod | None = None
         current_folio: str | None = None
-        current_scheme: Scheme | None = None
+        current_scheme: CAMSScheme | None = None
         current_pan: str | None = None
         current_amc: str | None = None
         current_registrar: str | None = None
@@ -281,7 +281,7 @@ class CASProcessor:
                     scheme_name, isin, rta_code, advisor = scheme_details
                     if current_scheme and current_scheme.scheme_name != scheme_name:
                         finalize_current_scheme()
-                    current_scheme = Scheme(
+                    current_scheme = CAMSScheme(
                         scheme_name=scheme_name,
                         isin=isin,
                         pan=current_pan,
@@ -289,24 +289,20 @@ class CASProcessor:
                         units=Decimal("0.0"),
                         nav=Decimal("0.0"),
                         cost=None,
-                        market_value=None,
-                        extras=SchemeExtras(
-                            amc=current_amc,
-                            advisor=advisor,
-                            rta_code=rta_code,
-                            opening_units=Decimal("0.0"),
-                            closing_units=Decimal("0.0"),
-                        ),
-                        transactions=[],
+                        amc=current_amc,
+                        advisor=advisor,
+                        rta_code=rta_code,
+                        opening_units=Decimal("0.0"),
+                        closing_units=Decimal("0.0"),
                     )
                     if current_registrar:
-                        current_scheme.extras.rta = current_registrar
+                        current_scheme.rta = current_registrar
                         current_registrar = None
 
                 # Registrar can be on the same line as scheme description or on the next/previous line
                 if registrar := self.extract_registrar(line):
                     if current_scheme:
-                        current_scheme.extras.rta = registrar
+                        current_scheme.rta = registrar
                     else:
                         current_registrar = registrar
                     continue
@@ -319,13 +315,13 @@ class CASProcessor:
                     continue
 
                 if (open_units := self.extract_open_units(line)) is not None:
-                    current_scheme.open = current_scheme.units = open_units
+                    current_scheme.opening_units = current_scheme.closing_units = open_units
                     continue
 
                 if parsed_txns := self.extract_transactions(line, word_rects, headers=page_data.headers_data):
                     for txn in parsed_txns:
                         if txn.units is not None:
-                            current_scheme.units += txn.units
+                            current_scheme.closing_units += txn.units
                     current_scheme.transactions.extend(parsed_txns)
 
                 current_scheme = self.extract_scheme_valuation(line, current_scheme)
@@ -337,9 +333,9 @@ class CASProcessor:
     def process_summary_version(self, document_data: DocumentData) -> CASData:
         """Process the text version of a CAS pdf and return the summarized processed data."""
 
-        schemes: list[Scheme] = []
+        schemes: list[CAMSScheme] = []
         current_folio: str | None = None
-        current_scheme: Scheme | None = None
+        current_scheme: CAMSScheme | None = None
         statement_period: StatementPeriod | None = None
 
         for page_data in document_data:
@@ -365,7 +361,7 @@ class CASProcessor:
                     scheme_name = summary_row_match.group("name")
                     scheme_name = re.sub(r"\(formerly.+?\)", "", scheme_name, flags=TEXT_FLAGS).strip()
 
-                    current_scheme = Scheme(
+                    current_scheme = CAMSScheme(
                         isin=summary_row_match.group("isin"),
                         scheme_name=scheme_name,
                         folio=current_folio,
@@ -373,10 +369,8 @@ class CASProcessor:
                         nav=formatINR(summary_row_match.group("nav")),
                         market_value=formatINR(summary_row_match.group("value")),
                         cost=formatINR(summary_row_match.group("cost")),
-                        extras=SchemeExtras(
-                            rta=summary_row_match.group("rta").strip(), rta_code=summary_row_match.group("code").strip()
-                        ),
-                        transactions=[],
+                        rta=summary_row_match.group("rta").strip(),
+                        rta_code=summary_row_match.group("code").strip(),
                     )
                     continue
 
