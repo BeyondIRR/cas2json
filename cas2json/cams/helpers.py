@@ -11,8 +11,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def get_transaction_type(description: str, units: Decimal | None) -> tuple[TransactionType, Decimal | None]:
+def get_transaction_type(description: str | None, units: Decimal | None) -> tuple[TransactionType, Decimal | None]:
     """Get transaction type from the description text and units."""
+    if not description:
+        return (TransactionType.UNKNOWN, None)
 
     description = description.lower()
     # Dividend

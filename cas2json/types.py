@@ -15,26 +15,34 @@ LineData = Generator[tuple[str, list[WordData]]]
 
 @dataclass(slots=True, frozen=True)
 class PageData:
+    """Data Type for a single page in the CAMS document."""
+
     lines_data: LineData
     headers_data: dict[str, Rect]
 
 
 @dataclass(slots=True)
 class StatementPeriod:
-    to: str
-    from_: str = field(default_factory=list)
+    """Statement Period Data Type"""
+
+    to: str | None
+    from_: str | None
 
 
 @dataclass(slots=True)
 class InvestorInfo:
+    """Investor Information Data Type"""
+
     name: str
-    email: str
+    email: str | None
     address: str
     mobile: str
 
 
 @dataclass(slots=True)
 class TransactionData:
+    """Transaction Data Type for CAMS"""
+
     date: date | str
     description: str
     type: TransactionType
@@ -54,10 +62,12 @@ class TransactionData:
 
 @dataclass(slots=True)
 class Scheme:
-    isin: str
+    """Base Scheme Data Type."""
+
+    isin: str | None
     scheme_name: str
-    nav: Decimal | float
-    units: Decimal | float
+    nav: Decimal | float | None
+    units: Decimal | float | None
     cost: Decimal | float | None
     folio: str | None = None
     market_value: Decimal | float | None = None
@@ -73,6 +83,8 @@ class Scheme:
 
 @dataclass(slots=True)
 class CAMSScheme(Scheme):
+    """CAMS Scheme Data Type."""
+
     pan: str | None = None
     nominees: list[str] = field(default_factory=list)
     transactions: list[TransactionData] = field(default_factory=list)
@@ -85,11 +97,11 @@ class CAMSScheme(Scheme):
 
 
 @dataclass(slots=True)
-class CASData:
+class CAMSData:
     """CAS Parser return data type."""
 
-    statement_period: StatementPeriod | None
     schemes: list[CAMSScheme]
+    statement_period: StatementPeriod | None = None
     investor_info: InvestorInfo | None = None
     file_type: FileType = FileType.UNKNOWN
     file_version: FileVersion = FileVersion.UNKNOWN
@@ -99,40 +111,49 @@ class CASData:
 class PartialCASData:
     """CAS Parser return data type for partial data."""
 
-    investor_info: InvestorInfo
+    investor_info: InvestorInfo | None
     file_type: FileType
     document_data: DocumentData
     file_version: FileVersion
+    statement_period: StatementPeriod | None
 
 
 @dataclass(slots=True)
 class DematOwner:
+    """Demat Account Owner Data Type for NSDL."""
+
     name: str
     pan: str
 
 
 @dataclass(slots=True)
 class DematAccount:
+    """Demat Account Data Type for NSDL."""
+
     name: str
-    ac_type: str
-    units: Decimal
+    ac_type: str | None
+    units: Decimal | None
     schemes_count: int
     dp_id: str | None = ""
-    folios: int | None = None
+    folios: int = 0
     client_id: str | None = ""
     holders: list[DematOwner] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class NSDLScheme(Scheme):
+    """NSDL Scheme Data Type."""
+
     dp_id: str | None = ""
     client_id: str | None = ""
 
 
 @dataclass(slots=True)
 class NSDLCASData:
+    """NSDL CAS Parser return data type."""
+
     accounts: list[DematAccount]
     schemes: list[NSDLScheme]
-    statement_period: StatementPeriod
+    statement_period: StatementPeriod | None = None
     investor_info: InvestorInfo | None = None
     file_type: FileType | None = None

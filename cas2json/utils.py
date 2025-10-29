@@ -1,11 +1,13 @@
 import re
+from collections.abc import Iterable
 from decimal import Decimal
+from typing import Any
 
 from cas2json.exceptions import HeaderParseError
 from cas2json.flags import MULTI_TEXT_FLAGS
 
 
-def get_statement_dates(parsed_lines: list[str], reg_exp: str) -> tuple[str | None, str | None]:
+def get_statement_dates(parsed_lines: list[str], reg_exp: str) -> tuple[str | Any, ...]:
     """
     Helper to get dates for which the statement is applicable.
     """
@@ -22,5 +24,5 @@ def formatINR(value: str | None) -> Decimal | None:
     return None
 
 
-def format_values(values: list[str | None]) -> list[Decimal | None]:
+def format_values(values: Iterable[str | None]) -> list[Decimal | None]:
     return [formatINR(value) for value in values]

@@ -5,7 +5,10 @@ class CustomStrEnum(StrEnum):
     """Custom string enum that auto-generates values in uppercase."""
 
     @staticmethod
-    def _generate_next_value_(name, *args):
+    def _generate_next_value_(name, start, count, last_values):
+        """
+        Return the upper-cased version of the member name.
+        """
         return name.upper()
 
 
@@ -28,6 +31,8 @@ class FileVersion(CustomStrEnum):
 
 
 class TransactionType(CustomStrEnum):
+    """Enum for different types of transactions."""
+
     PURCHASE = auto()
     PURCHASE_SIP = auto()
     REDEMPTION = auto()
@@ -56,6 +61,8 @@ class CashFlow(Enum):
 
 
 class SchemeType(CustomStrEnum):
+    """Enum for different types of schemes."""
+
     STOCK = auto()
     MUTUAL_FUND = auto()
     CORPORATE_BOND = auto()

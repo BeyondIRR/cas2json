@@ -9,6 +9,7 @@ SUMMARY_ROW = (
     r"(?P<name>.+?)\s+(?P<cost>[\d,.]+)?\s+(?P<balance>[\d,.]+)\s*"
     r"(?P<date>\d{2}-[A-Za-z]{3}-\d{4})\s*(?P<nav>[\d,.]+)\s*(?P<value>[\d,.]+)\s*(?P<rta>\w+)\s*$"
 )
+SUMMARY_DATE = rf"as\s+on\s+{DATE}"
 # Detailed Version
 # Scheme details
 SCHEME = r"(?P<code>[\w]+)\s*-\s*\d*\s*(?P<name>.+?)(?:\(Advi|ISIN).*$"
@@ -28,7 +29,6 @@ TRANSACTIONS = rf"^{DATE}\s*([^:]*?)(?=\s*{DATE}|\Z)"
 DESCRIPTION = r"^(.*?)\s+((?:[(-]*[\d,]+\.\d+\)*\s*)+)"
 CAS_TYPE = r"consolidated\s+account\s+(statement|summary)"
 DETAILED_DATE = rf"{DATE}\s+to\s+{DATE}"
-SUMMARY_DATE = rf"as\s+on\s+{DATE}"
 DIVIDEND = r"(?:div\.|dividend|idcw).+?(reinvest)*.*?@\s*Rs\.\s*([\d\.]+)(?:\s+per\s+unit)?"
 
 # Investor Details

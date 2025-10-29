@@ -10,13 +10,11 @@ from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
 from cas2json.types import (
     CAMSScheme,
-    CASData,
     DocumentData,
-    StatementPeriod,
     TransactionData,
     WordData,
 )
-from cas2json.utils import formatINR, get_statement_dates
+from cas2json.utils import formatINR
 
 
 class CASProcessor:
@@ -53,7 +51,7 @@ class CASProcessor:
         return current_folio, None
 
     @staticmethod
-    def extract_scheme_details(line: str) -> tuple[str, str, str, str] | None:
+    def extract_scheme_details(line: str) -> tuple[str, str | None, str | None, str | None] | None:
         """
         Extract scheme details from the line if present in order of <scheme_name>, <isin>, <rta_code>, <advisor>.
 
@@ -133,7 +131,7 @@ class CASProcessor:
             current_scheme.units = formatINR(close_units_match.group(1))
 
         if cost_match := re.search(patterns.COST, line, re.I):
-            current_scheme.cost = formatINR(cost_match.group(1))
+            current_scheme.cost = formatINR(cost_match.group(1)) or Decimal("0.0")
             current_scheme.invested_value = current_scheme.cost * current_scheme.units if current_scheme.units else None
 
         if valuation_match := re.search(patterns.VALUATION, line, re.I):
@@ -221,12 +219,12 @@ class CASProcessor:
             units = formatINR(txn_values["units"])
             transaction_type, dividend_rate = get_transaction_type(description, units)
             # Consider positive and handle inflow/outflow based on units/transaction type
-            amount = abs(formatINR(txn_values["amount"])) if txn_values["amount"] else None
+            amount = abs(formatINR(txn_values["amount"]) or 0) if txn_values["amount"] else None
             transactions.append(
                 TransactionData(
                     date=date_parser.parse(date).date(),
                     description=description,
-                    type=transaction_type.name,
+                    type=transaction_type,
                     amount=amount,
                     units=units,
                     nav=formatINR(txn_values["nav"]),
@@ -236,8 +234,8 @@ class CASProcessor:
             )
         return transactions
 
-    def process_detailed_version(self, document_data: DocumentData) -> CASData:
-        """Process the parsed data of CAMS pdf and return the detailed processed data."""
+    def process_detailed_version_schemes(self, document_data: DocumentData) -> list[CAMSScheme]:
+        """Process the parsed data of Detailed CAMS pdf and return the processed schemes."""
 
         def finalize_current_scheme():
             """Append current scheme to the schemes list and reset"""
@@ -247,7 +245,6 @@ class CASProcessor:
                 current_scheme = None
 
         schemes: list[CAMSScheme] = []
-        statement_period: StatementPeriod | None = None
         current_folio: str | None = None
         current_scheme: CAMSScheme | None = None
         current_pan: str | None = None
@@ -255,11 +252,6 @@ class CASProcessor:
         current_registrar: str | None = None
         for page_data in document_data:
             page_lines_data = list(page_data.lines_data)
-
-            if not statement_period:
-                from_date, to_date, *_ = get_statement_dates([i for i, _ in page_lines_data], patterns.DETAILED_DATE)
-                statement_period = StatementPeriod(from_=from_date, to=to_date)
-
             for idx, (line, word_rects) in enumerate(page_lines_data):
                 if amc := self.extract_amc(line):
                     current_amc = amc
@@ -328,22 +320,16 @@ class CASProcessor:
 
         finalize_current_scheme()
 
-        return CASData(statement_period=statement_period, schemes=schemes)
+        return schemes
 
-    def process_summary_version(self, document_data: DocumentData) -> CASData:
-        """Process the text version of a CAS pdf and return the summarized processed data."""
+    def process_summary_version_schemes(self, document_data: DocumentData) -> list[CAMSScheme]:
+        """Process the parsed data of Summarized CAMS pdf and return the processed schemes."""
 
         schemes: list[CAMSScheme] = []
         current_folio: str | None = None
         current_scheme: CAMSScheme | None = None
-        statement_period: StatementPeriod | None = None
-
         for page_data in document_data:
             page_lines = [line for line, _ in page_data.lines_data]
-
-            if not statement_period:
-                date, *_ = get_statement_dates(page_lines, patterns.SUMMARY_DATE)
-                statement_period = StatementPeriod(from_=date, to=date)
 
             for line in page_lines:
                 if schemes and re.search("Total", line, re.I):
@@ -378,4 +364,4 @@ class CASProcessor:
                 if current_scheme:
                     current_scheme.scheme_name = f"{current_scheme.scheme_name} {line.strip()}"
 
-        return CASData(statement_period=statement_period, schemes=schemes)
+        return schemes
