@@ -89,7 +89,7 @@ class CASData:
     """CAS Parser return data type."""
 
     statement_period: StatementPeriod | None
-    schemes: list[Scheme]
+    schemes: list[CAMSScheme]
     investor_info: InvestorInfo | None = None
     file_type: FileType = FileType.UNKNOWN
     file_version: FileVersion = FileVersion.UNKNOWN
@@ -124,15 +124,15 @@ class DematAccount:
 
 
 @dataclass(slots=True)
-class NSDLCASData:
-    accounts: list[DematAccount]
-    schemes: list[Scheme]
-    statement_period: StatementPeriod
-    investor_info: InvestorInfo | None = None
-    file_type: FileType | None = None
-
-
-@dataclass(slots=True)
 class NSDLScheme(Scheme):
     dp_id: str | None = ""
     client_id: str | None = ""
+
+
+@dataclass(slots=True)
+class NSDLCASData:
+    accounts: list[DematAccount]
+    schemes: list[NSDLScheme]
+    statement_period: StatementPeriod
+    investor_info: InvestorInfo | None = None
+    file_type: FileType | None = None

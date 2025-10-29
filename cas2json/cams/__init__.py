@@ -7,7 +7,7 @@ from cas2json.parser import cas_pdf_to_text
 from cas2json.types import CASData
 
 
-def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=True) -> CASData:
+def parse_cams_pdf(filename: str | io.IOBase, password: str | None = None, sort_transactions=True) -> CASData:
     """
     Parse CAMS or KFintech CAS pdf and returns processed data.
 
@@ -15,7 +15,7 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=T
     ----------
     filename : str | io.IOBase
         The path to the PDF file or a file-like object.
-    password : str
+    password : str | None
         The password to unlock the PDF file.
     sort_transactions : bool
         Whether to sort transactions by date and re-compute balances.
@@ -37,7 +37,7 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str, sort_transactions=T
             transactions = scheme.transactions
             sorted_transactions = sorted(transactions, key=lambda x: x.date)
             if transactions != sorted_transactions:
-                balance = scheme.open
+                balance = scheme.opening_units
                 for transaction in sorted_transactions:
                     balance += transaction.units or 0
                     transaction.balance = balance
