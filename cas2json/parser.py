@@ -37,38 +37,24 @@ class CASParser:
 
     @staticmethod
     def _get_document(filename: str | io.IOBase, password: str | None) -> Document:
-        """
-        Open and return pymupdf Document instance.
-
-        Parameters
-        ----------
-        filename : str | io.IOBase
-            The path to the PDF file or a file-like object.
-        password : str
-            The password to unlock the PDF file.
-
-        Returns
-        -------
-        Document instance of provided file
-        """
+        """Open and return pymupdf Document instance."""
         if isinstance(filename, str):
-            fp = open(filename, "rb")  # NOQA
+            with open(filename, "rb") as f:
+                data = f.read()
         elif hasattr(filename, "read") and hasattr(filename, "close"):  # file-like object
-            fp = filename
+            filename.seek(0)
+            data = filename.read()
         else:
             raise CASParseError("Invalid input. filename should be a string or a file like object")
 
-        with fp:
-            try:
-                doc = Document(stream=fp.read(), filetype="pdf")
-            except Exception as e:
-                raise CASParseError(f"Unhandled error while opening file :: {e!s}") from e
+        try:
+            doc = Document(stream=data, filetype="pdf")
+        except Exception as e:
+            raise CASParseError(f"Unhandled error while opening file :: {e!s}") from e
 
-            if doc.needs_pass:
-                rc = doc.authenticate(password)
-                if not rc:
-                    raise IncorrectPasswordError("Incorrect PDF password!")
-            return doc
+        if doc.needs_pass and not doc.authenticate(password):
+            raise IncorrectPasswordError("Incorrect PDF password!")
+        return doc
 
     @staticmethod
     def parse_file_type(page_blocks: list[tuple]) -> FileType:
@@ -241,6 +227,11 @@ class CASParser:
                 continue
             positions[header] = min(matches, key=lambda x: x[0].y0)[0]
         return positions
+
+    def find_in_doc_page(self, text: str, page_no: int = 0) -> bool:
+        """Check if the given text is present in the document's page."""
+        page = self.document.load_page(page_no)
+        return page.search_for(text) != []
 
     def extract_statement_metadata(self) -> dict[str, Any]:
         """Extract statement metadata like file type, version, statement period and investor info."""
