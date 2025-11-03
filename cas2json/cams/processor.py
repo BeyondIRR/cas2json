@@ -6,18 +6,14 @@ from pymupdf import Rect
 
 from cas2json import patterns
 from cas2json.cams.helpers import get_parsed_scheme_name, get_transaction_type
+from cas2json.cams.types import CAMSPageData, CAMSScheme
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS, TEXT_FLAGS
-from cas2json.types import (
-    CAMSScheme,
-    DocumentData,
-    TransactionData,
-    WordData,
-)
+from cas2json.types import DocumentData, TransactionData, WordData
 from cas2json.utils import formatINR
 
 
-class CASProcessor:
+class CAMSProcessor:
     __slots__ = ()
 
     @staticmethod
@@ -234,7 +230,7 @@ class CASProcessor:
             )
         return transactions
 
-    def process_detailed_version_schemes(self, document_data: DocumentData) -> list[CAMSScheme]:
+    def process_detailed_version_schemes(self, document_data: DocumentData[CAMSPageData]) -> list[CAMSScheme]:
         """Process the parsed data of Detailed CAMS pdf and return the processed schemes."""
 
         def finalize_current_scheme():
@@ -322,7 +318,7 @@ class CASProcessor:
 
         return schemes
 
-    def process_summary_version_schemes(self, document_data: DocumentData) -> list[CAMSScheme]:
+    def process_summary_version_schemes(self, document_data: DocumentData[CAMSPageData]) -> list[CAMSScheme]:
         """Process the parsed data of Summarized CAMS pdf and return the processed schemes."""
 
         schemes: list[CAMSScheme] = []

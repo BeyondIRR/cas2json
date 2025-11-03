@@ -5,7 +5,8 @@ from typing import Any
 
 from cas2json import patterns
 from cas2json.flags import MULTI_TEXT_FLAGS
-from cas2json.types import DematAccount, DematOwner, DocumentData, NSDLCASData, NSDLScheme, SchemeType, StatementPeriod
+from cas2json.nsdl.types import DematAccount, DematOwner, NSDLCASData, NSDLScheme
+from cas2json.types import DocumentData, SchemeType, StatementPeriod
 from cas2json.utils import format_values, get_statement_dates
 
 SCHEME_MAP = defaultdict(

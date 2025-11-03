@@ -1,24 +1,26 @@
 from collections.abc import Generator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import TypeVar
 
 from pymupdf import Rect
 
 from cas2json.constants import HOLDINGS_CASHFLOW
 from cas2json.enums import FileType, FileVersion, SchemeType, TransactionType
 
+T = TypeVar("T", bound="BasePageData")
+
 WordData = tuple[Rect, str]
-DocumentData = list["PageData"]
+DocumentData = list[T]
 LineData = Generator[tuple[str, list[WordData]]]
 
 
 @dataclass(slots=True, frozen=True)
-class PageData:
-    """Data Type for a single page in the CAMS document."""
+class BasePageData:
+    """Data Type for a single page in the CAS document."""
 
     lines_data: LineData
-    headers_data: dict[str, Rect]
 
 
 @dataclass(slots=True)
@@ -81,79 +83,19 @@ class Scheme:
             self.market_value = self.nav * self.units
 
 
-@dataclass(slots=True)
-class CAMSScheme(Scheme):
-    """CAMS Scheme Data Type."""
+@dataclass(slots=True, frozen=True)
+class CASMetaData:
+    """CAS Parser Metadata Type."""
 
-    pan: str | None = None
-    nominees: list[str] = field(default_factory=list)
-    transactions: list[TransactionData] = field(default_factory=list)
-    advisor: str | None = None
-    amc: str | None = None
-    rta: str | None = None
-    rta_code: str | None = None
-    opening_units: Decimal | float | None = None
-    calculated_units: Decimal | float | None = None
-
-
-@dataclass(slots=True)
-class CAMSData:
-    """CAS Parser return data type."""
-
-    schemes: list[CAMSScheme]
-    statement_period: StatementPeriod | None = None
-    investor_info: InvestorInfo | None = None
-    file_type: FileType = FileType.UNKNOWN
-    file_version: FileVersion = FileVersion.UNKNOWN
-
-
-@dataclass(slots=True)
-class PartialCASData:
-    """CAS Parser return data type for partial data."""
-
-    investor_info: InvestorInfo | None
     file_type: FileType
-    document_data: DocumentData
     file_version: FileVersion
     statement_period: StatementPeriod | None
+    investor_info: InvestorInfo | None
 
 
 @dataclass(slots=True)
-class DematOwner:
-    """Demat Account Owner Data Type for NSDL."""
+class CASParsedData:
+    """CAS Parser return data type for partial data."""
 
-    name: str
-    pan: str
-
-
-@dataclass(slots=True)
-class DematAccount:
-    """Demat Account Data Type for NSDL."""
-
-    name: str
-    ac_type: str | None
-    units: Decimal | None
-    schemes_count: int
-    dp_id: str | None = ""
-    folios: int = 0
-    client_id: str | None = ""
-    holders: list[DematOwner] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class NSDLScheme(Scheme):
-    """NSDL Scheme Data Type."""
-
-    dp_id: str | None = ""
-    client_id: str | None = ""
-
-
-@dataclass(slots=True)
-class NSDLCASData:
-    """NSDL CAS Parser return data type."""
-
-    accounts: list[DematAccount]
-    schemes: list[NSDLScheme]
-    statement_period: StatementPeriod | None = None
-    investor_info: InvestorInfo | None = None
-    file_type: FileType | None = None
+    metadata: CASMetaData
+    document_data: DocumentData
