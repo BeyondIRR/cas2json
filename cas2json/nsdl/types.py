@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from cas2json.types import FileType, InvestorInfo, Scheme, StatementPeriod
+from cas2json.types import CASMetaData, Scheme
 
 
 @dataclass(slots=True)
@@ -40,6 +40,4 @@ class NSDLCASData:
 
     accounts: list[DematAccount]
     schemes: list[NSDLScheme]
-    statement_period: StatementPeriod | None = None
-    investor_info: InvestorInfo | None = None
-    file_type: FileType | None = None
+    metadata: CASMetaData | None = None

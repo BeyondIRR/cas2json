@@ -12,19 +12,6 @@ from cas2json.types import CASMetaData, FileType, FileVersion, InvestorInfo, Sta
 class NSDLParser(BaseCASParser):
     @staticmethod
     def parse_investor_info(page: Page) -> InvestorInfo:
-        """
-        Parse investor info from NSDL statement using pymupdf tables.
-
-        Parameters
-        ----------
-        page : Page
-            The pymupdf page object to extract information from.
-
-        Returns
-        -------
-        InvestorInfo
-            The extracted investor information.
-        """
         statement_regex = INVESTOR_STATEMENT_DP
         start_index = end_index = None
         words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
@@ -46,7 +33,6 @@ class NSDLParser(BaseCASParser):
         raise CASParseError("Unable to parse investor data")
 
     def extract_statement_metadata(self) -> CASMetaData:
-        """Extract statement metadata like file type, version, statement period and investor info."""
         page_options = {"flags": TEXTFLAGS_TEXT, "sort": True, "option": "blocks"}
         first_page_blocks = self.document.get_page_text(pno=0, **page_options)
         file_type = self.parse_file_type(first_page_blocks)

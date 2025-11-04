@@ -3,15 +3,7 @@ from decimal import Decimal
 
 from pymupdf import Rect
 
-from cas2json.types import (
-    BasePageData,
-    FileType,
-    FileVersion,
-    InvestorInfo,
-    Scheme,
-    StatementPeriod,
-    TransactionData,
-)
+from cas2json.types import BasePageData, CASMetaData, Scheme, TransactionData
 
 
 @dataclass(slots=True, frozen=True)
@@ -41,7 +33,4 @@ class CAMSData:
     """CAS Parser return data type."""
 
     schemes: list[CAMSScheme]
-    statement_period: StatementPeriod | None = None
-    investor_info: InvestorInfo | None = None
-    file_type: FileType = FileType.UNKNOWN
-    file_version: FileVersion = FileVersion.UNKNOWN
+    metadata: CASMetaData

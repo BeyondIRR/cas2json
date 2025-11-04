@@ -42,10 +42,4 @@ def parse_cams_pdf(filename: str | io.IOBase, password: str | None = None, sort_
                     transaction.balance = balance
                 scheme.transactions = sorted_transactions
 
-    return CAMSData(
-        schemes=schemes,
-        statement_period=partial_cas_data.metadata.statement_period,
-        investor_info=partial_cas_data.metadata.investor_info,
-        file_type=partial_cas_data.metadata.file_type,
-        file_version=partial_cas_data.metadata.file_version,
-    )
+    return CAMSData(schemes=schemes, metadata=partial_cas_data.metadata)

@@ -103,11 +103,23 @@ class BaseCASParser:
 
     @staticmethod
     def parse_investor_info(page: Page) -> InvestorInfo:
-        """To be implemented for investor info parsing by respective subclasses."""
+        """
+        Parse investor info from NSDL statement using pymupdf tables.
+
+        Parameters
+        ----------
+        page : Page
+            The pymupdf page object to extract information from.
+
+        Returns
+        -------
+        InvestorInfo
+            The extracted investor information.
+        """
         ...
 
     def extract_statement_metadata(self) -> CASMetaData:
-        """To be implemented for statement metadata extraction by respective subclasses."""
+        """Extract statement metadata like file type, version, statement period and investor info."""
         ...
 
     def find_in_doc_page(self, text: str, page_no: int = 0) -> bool:

@@ -22,19 +22,6 @@ from cas2json.types import (
 class CAMSParser(BaseCASParser):
     @staticmethod
     def parse_investor_info(page: Page) -> InvestorInfo:
-        """
-        Parse investor info using pymupdf tables.
-
-        Parameters
-        ----------
-        page : Page
-            The pymupdf page object to extract information from.
-
-        Returns
-        -------
-        InvestorInfo
-            The extracted investor information.
-        """
         email_found = False
         address_lines = []
         email = mobile = name = None
@@ -92,7 +79,6 @@ class CAMSParser(BaseCASParser):
         return positions
 
     def extract_statement_metadata(self) -> CASMetaData:
-        """Extract statement metadata like file type, version, statement period and investor info."""
         first_page_blocks = self.document.get_page_text(pno=0, flags=TEXTFLAGS_TEXT, sort=True, option="blocks")
         file_type = self.parse_file_type(first_page_blocks)
         if file_type not in [FileType.CAMS, FileType.KFINTECH]:
@@ -118,14 +104,6 @@ class CAMSParser(BaseCASParser):
         )
 
     def parse_pdf(self) -> CASParsedData:
-        """
-        Parse CAS pdf and returns line data.
-
-        Returns
-        -------
-        PartialCasData which includes investor info, file type, version and parsed text lines (as much as close to original layout)
-        """
-
         metadata: CASMetaData = self.extract_statement_metadata()
         document_data: DocumentData[CAMSPageData] = []
         for page_num, page in enumerate(self.document):
