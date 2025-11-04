@@ -1,6 +1,6 @@
 [project]
 name = "cas2json"
-dynamic = ["version"]
+version = "1.0.0rc1"
 description = "Serialise financial statements to python objects"
 requires-python = ">=3.12"
 dependencies = [
