@@ -52,6 +52,14 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "cas2json/__init__.py"
 
+[tool.hatch.build]
+include = [
+  "cas2json",
+  "README.md",
+  "LICENSES",
+  "pyproject.toml",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["cas2json"]
 

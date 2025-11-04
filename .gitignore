@@ -151,3 +151,11 @@ pyrightconfig.json
 
 # Python lock files
 uv.lock
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
