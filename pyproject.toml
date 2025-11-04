@@ -1,12 +1,49 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025 BeyondIRR <https://beyondirr.com/>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 [project]
 name = "cas2json"
 version = "1.0.0rc1"
-description = "Serialise financial statements to python objects"
+authors = [{ name = "Aman Jagotra", email = "dragnemperor@gmail.com" }]
+maintainers = [
+  { name = "Aman Jagotra", email = "dragnemperor@gmail.com" },
+  {name = "Avishrant Sharma", email = "avishrants@gmail.com"},
+  {name = "Sagar Chand Agarwal", email = "sagar.agarwal@beyondirr.tech"},
+  {name = "Priyanshu Rajput", email = "priyanshu011109@gmail.com"}
+]
+description = "Serialize financial statements to python objects"
 requires-python = ">=3.12"
+readme="README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSES/GPL-3.0-or-later.txt"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "pymupdf>=1.24.0",
     "python-dateutil>=2.8.2,<3",
-    ]
+]
+
+[project.urls]
+Homepage = "https://github.com/cas2json/cas2json"
+Repository = "https://github.com/cas2json/cas2json"
+Issues = "https://github.com/cas2json/cas2json/issues"
 
 [build-system]
 requires = ["hatchling"]
