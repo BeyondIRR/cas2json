@@ -14,10 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from importlib.metadata import version
+
 from cas2json.cams import parse_cams_pdf
 from cas2json.cams.parser import CAMSParser
 from cas2json.nsdl import parse_nsdl_pdf
 from cas2json.nsdl.parser import NSDLParser
 from cas2json.parser import BaseCASParser
+
+__version__ = version("cas2json")
 
 __all__ = ["BaseCASParser", "CAMSParser", "NSDLParser", "parse_cams_pdf", "parse_nsdl_pdf"]

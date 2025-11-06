@@ -16,7 +16,7 @@
 
 [project]
 name = "cas2json"
-version = "1.0.0rc1"
+version = "1.0.1"
 authors = [{ name = "Aman Jagotra", email = "dragnemperor@gmail.com" }]
 maintainers = [
   { name = "Aman Jagotra", email = "dragnemperor@gmail.com" },
