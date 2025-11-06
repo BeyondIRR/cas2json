@@ -133,8 +133,9 @@ class CASProcessor:
             current_scheme.units = formatINR(close_units_match.group(1))
 
         if cost_match := re.search(patterns.COST, line, re.I):
-            current_scheme.cost = formatINR(cost_match.group(1))
-            current_scheme.invested_value = current_scheme.cost * current_scheme.units if current_scheme.units else None
+            current_scheme.invested_value = formatINR(cost_match.group(1)) or Decimal("0.0")
+            if current_scheme.units:
+                current_scheme.cost = round(current_scheme.invested_value / current_scheme.units, 4)
 
         if valuation_match := re.search(patterns.VALUATION, line, re.I):
             current_scheme.market_value = formatINR(valuation_match.group(2))
