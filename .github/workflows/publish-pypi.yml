@@ -16,6 +16,8 @@
 
 name: Publish release to PyPI
 
+run-name: PyPI Release - ${{ github.ref_name }}
+
 on:
   release:
     types: [published]
