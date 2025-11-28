@@ -15,45 +15,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import re
-from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
 from cas2json import patterns
 from cas2json.flags import MULTI_TEXT_FLAGS
+from cas2json.nsdl.constants import (
+    BASE_PAGE_WIDTH,
+    CDSL_HEADERS,
+    MF_FOLIO_HEADERS,
+    NSDL_MF_HEADERS,
+    NSDL_STOCK_HEADERS,
+    SCHEME_MAP,
+)
 from cas2json.nsdl.types import DematAccount, DematOwner, NSDLCASData, NSDLScheme
 from cas2json.types import DocumentData, SchemeType, WordData
 from cas2json.utils import format_values, formatINR
-
-SCHEME_MAP = defaultdict(
-    lambda: SchemeType.OTHER,
-    {
-        "Equities (E)": SchemeType.STOCK,
-        "Mutual Funds (M)": SchemeType.MUTUAL_FUND,
-        "Corporate Bonds (C)": SchemeType.CORPORATE_BOND,
-        "Preference Shares (P)": SchemeType.PREFERENCE_SHARES,
-        "Mutual Fund Folios (F)": SchemeType.MUTUAL_FUND,
-    },
-)
-NSDL_STOCK_HEADERS = [("cost", (230, 280)), ("units", (310, 350)), ("nav", (405, 440)), ("market_value", (505, 550))]
-NSDL_MF_HEADERS = [("units", (285, 310)), ("nav", (390, 415)), ("market_value", (505, 550))]
-CDSL_HEADERS = [
-    ("units", (210, 265)),
-    ("safekeep", (285, 345)),
-    ("pledged", (370, 430)),
-    ("nav", (435, 485)),
-    ("market_value", (530, 555)),
-]
-MF_FOLIO_HEADERS = [
-    ("folio", (155, 190)),
-    ("units", (210, 235)),
-    ("cost", (265, 305)),
-    ("invested", (315, 360)),
-    ("nav", (370, 420)),
-    ("market_value", (425, 475)),
-    ("gain", (485, 530)),
-    ("annualized", (545, 590)),
-]
 
 
 class NSDLProcessor:
@@ -65,6 +42,7 @@ class NSDLProcessor:
         holding: dict[str, None | str],
         word_rects: list[WordData],
         headers: list[tuple[str, tuple[int, int]]],
+        width_scale: float = 1.0,
         value_tolerance: tuple[float, float] = (5, 5),
     ) -> dict[str, None | str]:
         left_tol, right_tol = value_tolerance
@@ -80,7 +58,10 @@ class NSDLProcessor:
                 # Remove to avoid matching again
                 word_rects.pop(idx)
                 for header, rect in headers:
-                    if val_rect.x0 >= rect[0] - left_tol and val_rect.x1 <= rect[1] + right_tol:
+                    if (
+                        val_rect.x0 >= (rect[0] * width_scale) - left_tol
+                        and val_rect.x1 <= (rect[1] * width_scale) + right_tol
+                    ):
                         holding[header] = val
                         break
         return holding
@@ -144,36 +125,43 @@ class NSDLProcessor:
 
     @staticmethod
     def extract_scheme_details(
-        line: str, word_rects: list[WordData], scheme_type: SchemeType, ac_type: str | None
+        line: str, word_rects: list[WordData], scheme_type: SchemeType, ac_type: str | None, page_width: float
     ) -> NSDLScheme | None:
         """
         Extract Scheme details for NSDL demat account from the line if present.
 
         Supported line formats
         ----------------------
-        - "INE758E01017 JIO FINANCIAL SERVICES 10.00 5 311.70 1,558.50"
-        - "INE883F01010 AADHAR HOUSING FINANCE 0.000 0.000 0.000 502.75 0.00"
-        - "INF109K01BF6 ICICI Prudential 123456 1234.793 12.3891 12345.00 12.6220 12345.39 1,354.39 5.42"
+        - "INE758E01017 JIO FINANCIAL SERVICES 5 311.70 1,558.50" (NSDL MFs)
+        - "INE758E01017 JIO FINANCIAL SERVICES 10.00 5 311.70 1,558.50" (NSDL Stocks)
+        - "INE883F01010 AADHAR HOUSING FINANCE 0.000 0.000 0.000 502.75 0.00" (CDSL)
+        - "INF109K01BF6 ICICI Prudential 123456 1234.793 12.3891 12345.00 12.6220 12345.39 1,354.39 5.42" (MF Folios)
 
         Order of details (in above):
 
-        - ISIN, Scheme Name (incomplete), Cost per Unit, Units, NAV, Market Value
-        - ISIN, Scheme Name (incomplete), Units, SafeKeep Balance, Pledged Balance, NAV, Market Value
-        - ISIN, Scheme Name (incomplete), Folio, Units, Cost Per Unit, Total Cost, NAV, Market Value, Unrealized Profit/Loss, Annualised Return
+        - ISIN, Scheme Name (incomplete), Units, NAV, Market Value (NSDL MFs)
+        - ISIN, Scheme Name (incomplete), Cost per Unit, Units, NAV, Market Value (NSDL Stocks)
+        - ISIN, Scheme Name (incomplete), Units, SafeKeep Balance, Pledged Balance, NAV, Market Value (CDSL)
+        - ISIN, Scheme Name (incomplete), Folio, Units, Cost Per Unit, Total Cost, NAV, Market Value, Unrealized Profit/Loss, Annualised Return (MF Folios)
         """
         if scheme_match := re.search(patterns.SCHEME_DESCRIPTION, line, MULTI_TEXT_FLAGS):
             isin, name, values, *_ = scheme_match.groups()
             holding: dict[str, str | None] = {"cost": None, "units": None, "nav": None, "market_value": None}
             values = re.findall(patterns.NUMBER, values.strip())
+            width_scale = page_width / BASE_PAGE_WIDTH
             match ac_type:
                 case "NSDL" if scheme_type == SchemeType.MUTUAL_FUND:
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, NSDL_MF_HEADERS)
+                    details = NSDLProcessor.identify_values(values, holding, word_rects, NSDL_MF_HEADERS, width_scale)
                 case "NSDL" if scheme_type == SchemeType.STOCK:
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, NSDL_STOCK_HEADERS)
+                    details = NSDLProcessor.identify_values(
+                        values, holding, word_rects, NSDL_STOCK_HEADERS, width_scale
+                    )
                 case "CDSL":
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, CDSL_HEADERS)
+                    details = NSDLProcessor.identify_values(values, holding, word_rects, CDSL_HEADERS, width_scale)
                 case "MF":
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, MF_FOLIO_HEADERS, (10, 10))
+                    details = NSDLProcessor.identify_values(
+                        values, holding, word_rects, MF_FOLIO_HEADERS, width_scale, (10, 10)
+                    )
                 case _:
                     return None
 
@@ -276,7 +264,9 @@ class NSDLProcessor:
                 elif any(i in line for i in SCHEME_MAP):
                     scheme_type = SCHEME_MAP[line.strip()]
 
-                elif scheme := (self.extract_scheme_details(line, words_rect, scheme_type, current_demat.ac_type)):
+                elif scheme := (
+                    self.extract_scheme_details(line, words_rect, scheme_type, current_demat.ac_type, page_data.width)
+                ):
                     scheme.dp_id = current_demat.dp_id
                     scheme.client_id = current_demat.client_id
                     schemes.append(scheme)

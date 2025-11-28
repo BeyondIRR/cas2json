@@ -129,9 +129,14 @@ class CAMSParser(BaseCASParser):
             words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
             if not words:
                 continue
-
+            width, height = page.rect.width, page.rect.height
             document_data.append(
-                CAMSPageData(lines_data=self.recover_lines(words), headers_data=self.get_header_positions(words))
+                CAMSPageData(
+                    lines_data=self.recover_lines(words),
+                    headers_data=self.get_header_positions(words),
+                    width=width,
+                    height=height,
+                )
             )
 
         return CASParsedData(document_data=document_data, metadata=metadata)

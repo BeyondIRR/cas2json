@@ -37,6 +37,8 @@ class BasePageData:
     """Data Type for a single page in the CAS document."""
 
     lines_data: LineData
+    width: float
+    height: float
 
 
 @dataclass(slots=True)

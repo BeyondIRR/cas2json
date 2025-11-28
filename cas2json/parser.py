@@ -161,7 +161,7 @@ class BaseCASParser:
             words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
             if not words:
                 continue
-
-            document_data.append(BasePageData(lines_data=self.recover_lines(words)))
+            width, height = page.rect.width, page.rect.height
+            document_data.append(BasePageData(lines_data=self.recover_lines(words), width=width, height=height))
 
         return CASParsedData(document_data=document_data, metadata=metadata)
