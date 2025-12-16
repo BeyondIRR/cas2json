@@ -42,7 +42,7 @@ NAV = rf"NAV\s+on\s+{DATE}\s*:\s*INR\s*([\d,.]+)"
 FOLIO = r"Folio\s+No\s*:\s+([\d/\s]+\d)\s"
 # Transaction details
 # To not match text like "15-Sep-2025: 1% redeemed.... added exclusion for ':' "
-TRANSACTIONS = rf"^{DATE}\s*([^:]*?)(?=\s*{DATE}|\Z)"
+TRANSACTIONS = rf"^{DATE}(?!\s*:)\s*(.*?)(?=\s*{DATE}|\Z)"
 DESCRIPTION = r"^(.*?)\s+((?:[(-]*[\d,]+\.\d+\)*\s*)+)"
 CAS_TYPE = r"consolidated\s+account\s+(statement|summary)"
 DETAILED_DATE = rf"{DATE}\s+to\s+{DATE}"
