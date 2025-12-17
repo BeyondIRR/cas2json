@@ -52,7 +52,7 @@ json_data = json.encode(python_dict)
 Notes:
 - All used types like transaction types can be found under `cas2json/enums.py`.
 - NSDL currently supports only parsing of holdings since the transactions history is not complete.
-
+- Adding multiple parsing methods for better control and accuracy is currently a work in progress and is NOT STABLE.
 ## License
 
 Cas2JSON is distributed under GNU GPL v3 license. - _IANAL_

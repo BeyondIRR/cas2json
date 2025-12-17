@@ -25,7 +25,7 @@ from cas2json.patterns import CAS_ID, DEMAT_STATEMENT_PERIOD, INVESTOR_STATEMENT
 from cas2json.types import CASMetaData, FileType, FileVersion, InvestorInfo, StatementPeriod
 
 
-class NSDLParser(BaseCASParser):
+class NSDLLineParser(BaseCASParser):
     @staticmethod
     def parse_investor_info(page: Page) -> InvestorInfo:
         statement_regex = INVESTOR_STATEMENT_DP

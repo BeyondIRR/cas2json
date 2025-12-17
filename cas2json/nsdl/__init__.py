@@ -15,13 +15,21 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import io
+from enum import Enum
 
-from cas2json.nsdl.parser import NSDLParser
-from cas2json.nsdl.processor import NSDLProcessor
+from cas2json.nsdl.line_parser.parser import NSDLLineParser
+from cas2json.nsdl.line_parser.processor import NSDLLineProcessor
 from cas2json.nsdl.types import NSDLCASData
 
 
-def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> NSDLCASData:
+class ParseMethod(Enum):
+    LINE_BASED = "line"
+    TABLE_BASED = "table"
+
+
+def parse_nsdl_pdf(
+    filename: str | io.IOBase, password: str, method: ParseMethod = ParseMethod.LINE_BASED
+) -> NSDLCASData:
     """
     Parse NSDL pdf and returns processed data.
 
@@ -31,8 +39,15 @@ def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> NSDLCASData:
         The path to the PDF file or a file-like object.
     password : str
         The password to unlock the PDF file.
+    method : str
+        The method to be used for parsing the pdf (right now we have only implemented one)
     """
-    partial_cas_data = NSDLParser(filename, password).parse_pdf()
-    processed_data = NSDLProcessor().process_statement(partial_cas_data.document_data)
+    if method == ParseMethod.LINE_BASED:
+        parser = NSDLLineParser(filename, password)
+        processor = NSDLLineProcessor()
+    else:
+        raise NotImplementedError("Incorrect parsing method input")
+    partial_cas_data = parser.parse_pdf()
+    processed_data = processor.process_statement(partial_cas_data.document_data)
     processed_data.metadata = partial_cas_data.metadata
     return processed_data

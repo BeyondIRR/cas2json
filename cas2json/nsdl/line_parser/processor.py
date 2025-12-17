@@ -33,7 +33,7 @@ from cas2json.types import DocumentData, SchemeType, WordData
 from cas2json.utils import format_values, formatINR
 
 
-class NSDLProcessor:
+class NSDLLineProcessor:
     __slots__ = ()
 
     @staticmethod
@@ -151,15 +151,17 @@ class NSDLProcessor:
             width_scale = page_width / BASE_PAGE_WIDTH
             match ac_type:
                 case "NSDL" if scheme_type == SchemeType.MUTUAL_FUND:
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, NSDL_MF_HEADERS, width_scale)
+                    details = NSDLLineProcessor.identify_values(
+                        values, holding, word_rects, NSDL_MF_HEADERS, width_scale
+                    )
                 case "NSDL" if scheme_type == SchemeType.STOCK:
-                    details = NSDLProcessor.identify_values(
+                    details = NSDLLineProcessor.identify_values(
                         values, holding, word_rects, NSDL_STOCK_HEADERS, width_scale
                     )
                 case "CDSL":
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, CDSL_HEADERS, width_scale)
+                    details = NSDLLineProcessor.identify_values(values, holding, word_rects, CDSL_HEADERS, width_scale)
                 case "MF":
-                    details = NSDLProcessor.identify_values(
+                    details = NSDLLineProcessor.identify_values(
                         values, holding, word_rects, MF_FOLIO_HEADERS, width_scale, (10, 10)
                     )
                 case _:
