@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A library to parse CAS (Consolidated Account Statement) from providers like CAMS, KFINTECH, NSDL (BETA) and get related data in JSON format.
+A library to parse CAS (Consolidated Account Statement) from providers like CAMS, KFINTECH, NSDL (BETA) , CDSL (BETA) and get related data in JSON format.
 
 ## Installation
 ```bash
@@ -38,6 +38,10 @@ data = parse_cams_pdf("/path/to/cams/file.pdf", "password")
 from cas2json import parse_nsdl_pdf
 data = parse_nsdl_pdf("/path/to/nsdl/file.pdf", "password")
 
+#For CDSL
+from cas2json import parse_cdsl_pdf
+data = parse_cdsl_pdf("/path/to/cdsl/file.pdf", "password")
+
 # To get data in form of Python dict
 from dataclasses import asdict
 python_dict = asdict(data)
@@ -51,7 +55,7 @@ json_data = json.encode(python_dict)
 
 Notes:
 - All used types like transaction types can be found under `cas2json/enums.py`.
-- NSDL currently supports only parsing of holdings since the transactions history is not complete.
+- NSDL/CDSL currently supports only parsing of holdings since the transactions history is not complete.
 
 ## License
 

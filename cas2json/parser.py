@@ -21,7 +21,15 @@ from pymupdf import TEXTFLAGS_TEXT, Document, Page, Rect
 
 from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError, IncorrectPasswordError
-from cas2json.types import BasePageData, CASMetaData, CASParsedData, DocumentData, InvestorInfo, LineData, WordData
+from cas2json.types import (
+    BasePageData,
+    CASMetaData,
+    CASParsedData,
+    DocumentData,
+    InvestorInfo,
+    LineData,
+    WordData,
+)
 
 
 class BaseCASParser:

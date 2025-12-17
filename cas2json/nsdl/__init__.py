@@ -18,10 +18,10 @@ import io
 
 from cas2json.nsdl.parser import NSDLParser
 from cas2json.nsdl.processor import NSDLProcessor
-from cas2json.nsdl.types import NSDLCASData
+from cas2json.types import DepositoryCASData
 
 
-def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> NSDLCASData:
+def parse_nsdl_pdf(filename: str | io.IOBase, password: str) -> DepositoryCASData:
     """
     Parse NSDL pdf and returns processed data.
 

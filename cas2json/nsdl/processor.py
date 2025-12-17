@@ -28,8 +28,15 @@ from cas2json.nsdl.constants import (
     NSDL_STOCK_HEADERS,
     SCHEME_MAP,
 )
-from cas2json.nsdl.types import DematAccount, DematOwner, NSDLCASData, NSDLScheme
-from cas2json.types import DocumentData, SchemeType, WordData
+from cas2json.types import (
+    DematAccount,
+    DematOwner,
+    DepositoryCASData,
+    DepositoryScheme,
+    DocumentData,
+    SchemeType,
+    WordData,
+)
 from cas2json.utils import format_values, formatINR
 
 
@@ -126,7 +133,7 @@ class NSDLProcessor:
     @staticmethod
     def extract_scheme_details(
         line: str, word_rects: list[WordData], scheme_type: SchemeType, ac_type: str | None, page_width: float
-    ) -> NSDLScheme | None:
+    ) -> DepositoryScheme | None:
         """
         Extract Scheme details for NSDL demat account from the line if present.
 
@@ -170,7 +177,7 @@ class NSDLProcessor:
             # TODO: name are mostly split into lines but there are cases of page breaks and thus there
             # will be lots of validations and checks to do to parse correct name
             name = re.sub(r"\s+", " ", name).strip()
-            return NSDLScheme(
+            return DepositoryScheme(
                 isin=isin,
                 scheme_name=name,
                 units=units,
@@ -183,12 +190,12 @@ class NSDLProcessor:
             )
         return None
 
-    def process_statement(self, document_data: DocumentData) -> NSDLCASData:
+    def process_statement(self, document_data: DocumentData) -> DepositoryCASData:
         """
         Process the text version of a NSDL pdf and return the processed data.
         """
         current_demat: DematAccount | None = None
-        schemes: list[NSDLScheme] = []
+        schemes: list[DepositoryScheme] = []
         scheme_type: SchemeType = SchemeType.OTHER
         holders: list[DematOwner] = []
         demats: dict[str, DematAccount] = {}
@@ -271,4 +278,4 @@ class NSDLProcessor:
                     scheme.client_id = current_demat.client_id
                     schemes.append(scheme)
 
-        return NSDLCASData(accounts=list(demats.values()), schemes=schemes)
+        return DepositoryCASData(accounts=list(demats.values()), schemes=schemes)

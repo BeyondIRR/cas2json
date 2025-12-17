@@ -83,4 +83,5 @@ class SchemeType(CustomStrEnum):
     MUTUAL_FUND = auto()
     CORPORATE_BOND = auto()
     PREFERENCE_SHARES = auto()
+    UNLISTED_SHARES = auto()
     OTHER = auto()
