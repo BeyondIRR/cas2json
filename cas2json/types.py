@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from collections.abc import Generator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from typing import TypeVar
@@ -85,11 +85,11 @@ class Scheme:
     """Base Scheme Data Type."""
 
     isin: str | None
-    scheme_name: str
     nav: Decimal | float | None
     units: Decimal | float | None
-    cost: Decimal | float | None
+    scheme_name: str | None = None
     folio: str | None = None
+    cost: Decimal | float | None = None
     market_value: Decimal | float | None = None
     invested_value: Decimal | float | None = None
     scheme_type: SchemeType = SchemeType.OTHER
@@ -117,3 +117,42 @@ class CASParsedData:
 
     metadata: CASMetaData
     document_data: DocumentData
+
+
+@dataclass(slots=True)
+class DematOwner:
+    """Demat Account Owner Data Type for NSDL."""
+
+    name: str
+    pan: str
+
+
+@dataclass(slots=True)
+class DematAccount:
+    """Demat Account Data Type for NSDL."""
+
+    name: str
+    ac_type: str | None
+    units: Decimal | None
+    schemes_count: int
+    dp_id: str | None = ""
+    folios: int = 0
+    client_id: str | None = ""
+    holders: list[DematOwner] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class DepositoryScheme(Scheme):
+    """CDSL Scheme Data Type."""
+
+    dp_id: str | None = ""
+    client_id: str | None = ""
+
+
+@dataclass(slots=True)
+class DepositoryCASData:
+    """CDSL CAS Parser return data type."""
+
+    accounts: list[DematAccount]
+    schemes: list[DepositoryScheme]
+    metadata: CASMetaData | None = None

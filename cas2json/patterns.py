@@ -63,9 +63,18 @@ PAN = r"PAN\s*:\s*([A-Z]{5}\d{4}[A-Z])"
 DEMAT = r"(CDSL|NSDL)\s+Demat\s+Account\s+(\d+)\s+([\d,.]+)"
 DP_CLIENT_ID = r"^DP\s*Id\s*:\s*(.+?)\s*Client\s*Id\s*:\s*(\d+)"
 DEMAT_MF_HEADER = r"Mutual Fund Folios\s+(\d+)\s+Folios\s+(\d+)\s+([\d,.]+)"
-DEMAT_HOLDER = r"([^\t\n0-9]+?)\s*\(PAN\s*:\s*(.+?)\)"
+DEMAT_HOLDER = r"([^\t\n0-9]+?)\s*\(\s*PAN\s*:\s*(.+?)\s*\)"
 # Scheme details
 SCHEME_DESCRIPTION = rf"^({ISIN})\s*(.+?)\s*((?:[(-]*\d[\d,.]*\s*)+)$"
 # Investor Details
 CAS_ID = r"[CAS|NSDL]\s+ID\s*:\s*(.+?)(?:\s|$)"
 INVESTOR_STATEMENT_DP = r"Statement\s+for\s+the\s+period|Your\s+demat\s+account\s+and\s+mutual\s+fund"
+
+
+# ---------------CDSL--------------- #
+
+CDSL_EQUITY_HEADER = r"^HOLDING STATEMENT AS ON \d{2}-\d{2}-\d{4}$"
+CDSL_BOND_HEADER = r"^HOLDING STATEMENT OF BONDS AS ON \d{2}-\d{2}-\d{4}$"
+CDSL_MF_FOLIOS_HEADER = r"^MUTUAL FUND UNITS HELD AS ON \d{2}-\d{2}-\d{4}$"
+BO_ID = r"(?:BO\s*ID|BOID)[\s:]*(\d{16}|\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4})"
+CDSL_DP_ID_FOR_NSDL = r"DPID\s*:\s*(IN\d{6})(\d{8})"

@@ -14,24 +14,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from importlib.metadata import version
+import io
 
-from cas2json.cams import parse_cams_pdf
-from cas2json.cams.parser import CAMSParser
-from cas2json.cdsl import parse_cdsl_pdf
 from cas2json.cdsl.parser import CDSLParser
-from cas2json.nsdl import parse_nsdl_pdf
-from cas2json.nsdl.parser import NSDLParser
-from cas2json.parser import BaseCASParser
+from cas2json.cdsl.processor import CDSLProcessor
+from cas2json.types import DepositoryCASData
 
-__version__ = version("cas2json")
 
-__all__ = [
-    "BaseCASParser",
-    "CAMSParser",
-    "CDSLParser",
-    "NSDLParser",
-    "parse_cams_pdf",
-    "parse_cdsl_pdf",
-    "parse_nsdl_pdf",
-]
+def parse_cdsl_pdf(filename: str | io.IOBase, password: str) -> DepositoryCASData:
+    """
+    Parse CDSL pdf and returns processed data.
+
+    Parameters
+    ----------
+    filename : str | io.IOBase
+        The path to the PDF file or a file-like object.
+    password : str
+        The password to unlock the PDF file.
+    """
+    partial_cas_data = CDSLParser(filename, password).parse_pdf()
+    processed_data = CDSLProcessor().process_statement(partial_cas_data.document_data)
+    processed_data.metadata = partial_cas_data.metadata
+    return processed_data

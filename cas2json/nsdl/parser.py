@@ -22,10 +22,18 @@ from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS
 from cas2json.parser import BaseCASParser
 from cas2json.patterns import CAS_ID, DEMAT_STATEMENT_PERIOD, INVESTOR_STATEMENT_DP
-from cas2json.types import CASMetaData, FileType, FileVersion, InvestorInfo, StatementPeriod
+from cas2json.types import (
+    CASMetaData,
+    FileType,
+    FileVersion,
+    InvestorInfo,
+    StatementPeriod,
+)
 
 
 class NSDLParser(BaseCASParser):
+    dp_type = FileType.NSDL
+
     @staticmethod
     def parse_investor_info(page: Page) -> InvestorInfo:
         statement_regex = INVESTOR_STATEMENT_DP
@@ -52,8 +60,8 @@ class NSDLParser(BaseCASParser):
         page_options = {"flags": TEXTFLAGS_TEXT, "sort": True, "option": "blocks"}
         first_page_blocks = self.document.get_page_text(pno=0, **page_options)
         file_type = self.parse_file_type(first_page_blocks)
-        if file_type != FileType.NSDL:
-            raise CASParseError("Not a valid NSDL file")
+        if file_type != self.dp_type:
+            raise CASParseError(f"Not a valid {self.dp_type} file")
 
         statement_period = None
         for block in self.document.get_page_text(pno=1, **page_options):
