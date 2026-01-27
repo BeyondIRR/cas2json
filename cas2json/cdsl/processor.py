@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Generator
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from cas2json import patterns
@@ -36,15 +37,25 @@ from cas2json.types import (
 )
 from cas2json.utils import format_values
 
+logger = logging.getLogger(__name__)
+
 
 class CDSLProcessor(NSDLProcessor):
     __slots__ = ()
 
     @staticmethod
     def _clean_decimal(val):
-        if not val or val in ("--", "-", "."):
+        if val is None:
             return None
-        return Decimal(val.replace(",", ""))
+        if isinstance(val, str):
+            val = val.replace(",", "").replace(" ", "").replace("/", "").strip().upper()
+            if val in ("--", "-", ".", "", "N/A", "NA"):
+                return None
+        try:
+            return Decimal(val)
+        except (ValueError, InvalidOperation):
+            logger.warning(f"Failed to convert to Decimal: '{val}'")
+            return None
 
     @staticmethod
     def extract_dp_client_id(line: str) -> tuple[str | Any, ...] | None:
