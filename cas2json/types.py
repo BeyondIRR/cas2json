@@ -143,7 +143,7 @@ class DematAccount:
 
 @dataclass(slots=True)
 class DepositoryScheme(Scheme):
-    """CDSL Scheme Data Type."""
+    """Scheme Data Type for NSDL/CDSL types"""
 
     dp_id: str | None = ""
     client_id: str | None = ""
@@ -151,7 +151,7 @@ class DepositoryScheme(Scheme):
 
 @dataclass(slots=True)
 class DepositoryCASData:
-    """CDSL CAS Parser return data type."""
+    """NSDL/CDSL CAS Parser return data type."""
 
     accounts: list[DematAccount]
     schemes: list[DepositoryScheme]
