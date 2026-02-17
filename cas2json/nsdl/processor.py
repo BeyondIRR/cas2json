@@ -263,7 +263,7 @@ class NSDLProcessor:
                     current_demat = demats.get("MF Folios")
 
                 elif dp_client_ids := self.extract_dp_client_id(line):
-                    current_demat = demats.get(dp_client_ids[0] + dp_client_ids[1], None)
+                    current_demat = demats.get(dp_client_ids[0] + dp_client_ids[1])
 
                 if current_demat is None:
                     continue

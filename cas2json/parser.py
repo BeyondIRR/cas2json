@@ -83,8 +83,8 @@ class BaseCASParser:
 
         Parameters
         ----------
-        page : Page
-            The pymupdf page object to extract information from.
+        words : list[WordData]
+            List of words with their bounding boxes and text.
         tolerance : int
             The tolerance level for line reconstitution (should words be joined)
         vertical_factor : int
@@ -95,7 +95,6 @@ class BaseCASParser:
         LineData
             Generator of reconstituted text lines along with their word positions.
         """
-        # flags are important as they control the extraction behavior like keep "hidden text" or not
         lines: list[tuple[str, Rect, list[WordData]]] = []
         line: list[WordData] = [words[0]]  # current line
         lrect: Rect = words[0][0]  # the line's rectangle
@@ -122,7 +121,7 @@ class BaseCASParser:
         ltext = " ".join(w[1] for w in word_pos)
         lines.append((ltext, lrect, word_pos))
 
-        for ltext, _, word_pos in sorted(lines, key=lambda x: (x[1].y1)):
+        for ltext, _, word_pos in sorted(lines, key=lambda x: x[1].y1):
             yield ltext, word_pos
 
     @staticmethod
@@ -166,6 +165,7 @@ class BaseCASParser:
             if metadata.file_type == FileType.NSDL and page_num == 0:
                 # No useful data in first page of NSDL doc
                 continue
+            # flags are important as they control the extraction behavior like keep "hidden text" or not
             words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
             if not words:
                 continue

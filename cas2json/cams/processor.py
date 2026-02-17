@@ -78,7 +78,7 @@ class CAMSProcessor:
             scheme_name = get_parsed_scheme_name(scheme_match.group("name"))
             # Split Scheme details becomes a bit malformed having "Registrar : CAMS" in between, hence
             # we have to remove it.
-            formatted_line = re.sub(r"Registrar\s*:\s*CAMS", "", line).strip()
+            formatted_line = re.sub(r"Registrar\s*:\s*(CAMS|KFINTECH)*", "", line).strip()
             metadata = {
                 key.strip().lower(): re.sub(r"\s+", "", value)
                 for key, value in re.findall(patterns.SCHEME_METADATA, formatted_line, MULTI_TEXT_FLAGS)
