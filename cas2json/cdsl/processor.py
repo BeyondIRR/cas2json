@@ -24,6 +24,7 @@ from typing import Any
 from cas2json import patterns
 from cas2json.cdsl.types import CDSLMFScheme
 from cas2json.cdsl.utils import resolve_scheme_type_from_heading
+from cas2json.constants import TOLERANCE
 from cas2json.flags import MULTI_TEXT_FLAGS
 from cas2json.nsdl.processor import NSDLProcessor
 from cas2json.types import (
@@ -206,7 +207,8 @@ class CDSLProcessor(NSDLProcessor):
         return None
 
     @staticmethod
-    def recover_table_lines(words: list[WordData], tolerance: int = 4) -> Generator[str]:
+    def recover_table_lines(words: list[WordData], tolerance: int = TOLERANCE) -> Generator[str]:
+        """Helper function to construct table lines from individual words with their positions."""
         lrects = [words[0][0]]
         line_words = [[words[0]]]
         for wr, text in words[1:]:

@@ -16,6 +16,9 @@
 
 from importlib.metadata import version
 
+if version("pymupdf") < "1.24":
+    raise ImportError(f"pymupdf version 1.24 or higher is required, found {version('pymupdf')}")
+
 from cas2json.cams import parse_cams_pdf
 from cas2json.cams.parser import CAMSParser
 from cas2json.cdsl import parse_cdsl_pdf

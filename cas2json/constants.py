@@ -15,8 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from collections import defaultdict
+from importlib.metadata import version
 
 from cas2json.enums import CashFlow, TransactionType
+
+# pymupdf's parsing technique is changed in version 1.25 onwards till 1.27, so adjusting tolerance here for table line recovery in CDSL
+TOLERANCE = 4
+if version("pymupdf") < "1.25":
+    TOLERANCE = 2
 
 HOLDINGS_CASHFLOW = defaultdict(
     lambda: CashFlow.ADD,
