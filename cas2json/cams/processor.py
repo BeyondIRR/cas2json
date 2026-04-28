@@ -63,7 +63,7 @@ class CAMSProcessor:
         return current_folio, None
 
     @staticmethod
-    def extract_scheme_details(line: str) -> tuple[str, str | None, str | None, str | None] | None:
+    def extract_scheme_details(line: str) -> tuple[str, str | None, str | None, str | None, str | None] | None:
         """
         Extract scheme details from the line if present in order of <scheme_name>, <isin>, <rta_code>, <advisor>.
 
@@ -74,11 +74,14 @@ class CAMSProcessor:
         - "FTI219-Franklin India Small Cap Fund - Growth (erstwhile Franklin India Smaller Companies Fund - Growth) (Non-Demat) -
           ISIN: INF090I01569 Registrar : CAMS (Advisor: ARN-0845)"
         """
-        if scheme_match := re.search(patterns.SCHEME, line, MULTI_TEXT_FLAGS):
+        formatted_line = re.sub(r"\s*Registrar\s*:\s*(CAMS|KFINTECH)*\s*", "", line).strip()
+        if (scheme_match := re.search(patterns.SCHEME, line, MULTI_TEXT_FLAGS)) and re.search(
+            patterns.ISIN, formatted_line, MULTI_TEXT_FLAGS
+        ):
             scheme_name = get_parsed_scheme_name(scheme_match.group("name"))
             # Split Scheme details becomes a bit malformed having "Registrar : CAMS" in between, hence
             # we have to remove it.
-            formatted_line = re.sub(r"Registrar\s*:\s*(CAMS|KFINTECH)*", "", line).strip()
+            scheme_name = re.sub(r"\s*Registrar\s*:\s*(CAMS|KFINTECH)*\s*", "", scheme_name).strip()
             metadata = {
                 key.strip().lower(): re.sub(r"\s+", "", value)
                 for key, value in re.findall(patterns.SCHEME_METADATA, formatted_line, MULTI_TEXT_FLAGS)
@@ -87,7 +90,8 @@ class CAMSProcessor:
             isin = isin_match.group(1) if isin_match else metadata.get("isin")
             rta_code = scheme_match.group("code").strip()
             advisor = metadata.get("advisor")
-            return scheme_name, isin, rta_code, advisor
+            rta = CAMSProcessor.extract_registrar(line)
+            return scheme_name, isin, rta_code, advisor, rta
         return None
 
     @staticmethod
@@ -103,6 +107,22 @@ class CAMSProcessor:
         """
         if registrar_match := re.search(patterns.REGISTRAR, line, TEXT_FLAGS):
             return registrar_match.group(1).strip()
+        return None
+
+    @staticmethod
+    def extract_advisor(line: str) -> str | None:
+        """
+        Extract advisor name from the line if present.
+
+        Supported line formats
+        ----------------------
+        - The following statement can be present as part of any line or can be independent line:
+
+          "Advisor : ARN-0845"
+        """
+        if advisor_match := re.search(patterns.ADVISOR, line, TEXT_FLAGS):
+            advisor = advisor_match.group(1).strip()
+            return re.sub(r"Registrar|CAMS|KFINTECH|\(|\)", "", advisor, flags=TEXT_FLAGS).strip()
         return None
 
     @staticmethod
@@ -262,28 +282,36 @@ class CAMSProcessor:
         current_scheme: CAMSScheme | None = None
         current_pan: str | None = None
         current_amc: str | None = None
-        current_registrar: str | None = None
         for page_data in document_data:
             page_lines_data = list(page_data.lines_data)
-            for idx, (line, word_rects) in enumerate(page_lines_data):
+            idx = 0
+            while idx < len(page_lines_data):
+                line, word_rects = page_lines_data[idx]
                 if amc := self.extract_amc(line):
                     current_amc = amc
+                    idx += 1
                     continue
 
                 if (folio_pan := self.extract_folio_pan(line, current_folio)) and current_folio != folio_pan[0]:
                     finalize_current_scheme()
                     current_folio, current_pan = folio_pan
+                    idx += 1
                     continue
                 # Long scheme names are sometimes split into multiple lines (usually 2).
                 # Thus, we need to join the split lines.
                 scheme_line = line
                 if idx + 1 < len(page_lines_data) and not re.search(patterns.NOMINEE, line, TEXT_FLAGS):
                     scheme_line = f"{scheme_line} {page_lines_data[idx + 1][0]}".strip()
-
                 if scheme_details := self.extract_scheme_details(scheme_line):
+                    if scheme_line != line:
+                        idx += 1  # consume the joined next line
+                    # For cases where scheme details span more than 2 lines or scheme name is clubbed with previous line
+                    if idx + 1 < len(page_lines_data) and not re.search(patterns.NOMINEE, line, TEXT_FLAGS):
+                        scheme_line = f"{scheme_line} {page_lines_data[idx + 1][0]}".strip()
+                    formatted_line = re.sub(r"\s*Registrar\s*:\s*(CAMS|KFINTECH)*\s*", "", scheme_line).strip()
                     if current_folio is None:
                         raise CASParseError("Layout Error! Scheme found before folio entry.")
-                    scheme_name, isin, rta_code, advisor = scheme_details
+                    scheme_name, isin, rta_code, advisor, rta = scheme_details
                     if current_scheme and current_scheme.scheme_name != scheme_name:
                         finalize_current_scheme()
                     current_scheme = CAMSScheme(
@@ -295,32 +323,25 @@ class CAMSProcessor:
                         nav=Decimal("0.0"),
                         cost=None,
                         amc=current_amc,
-                        advisor=advisor,
+                        advisor=advisor or self.extract_advisor(formatted_line),
                         rta_code=rta_code,
+                        rta=rta or self.extract_registrar(scheme_line),
                         opening_units=Decimal("0.0"),
                         calculated_units=Decimal("0.0"),
                     )
-                    if current_registrar:
-                        current_scheme.rta = current_registrar
-                        current_registrar = None
-
-                # Registrar can be on the same line as scheme description or on the next/previous line
-                if registrar := self.extract_registrar(line):
-                    if current_scheme:
-                        current_scheme.rta = registrar
-                    else:
-                        current_registrar = registrar
-                    continue
 
                 if current_scheme is None:
+                    idx += 1
                     continue
 
                 if nominees := self.extract_nominees(line):
                     current_scheme.nominees.extend(nominees)
+                    idx += 1
                     continue
 
                 if (open_units := self.extract_open_units(line)) is not None:
                     current_scheme.opening_units = current_scheme.calculated_units = open_units
+                    idx += 1
                     continue
 
                 if parsed_txns := self.extract_transactions(line, word_rects, headers=page_data.headers_data):
@@ -330,6 +351,7 @@ class CAMSProcessor:
                     current_scheme.transactions.extend(parsed_txns)
 
                 current_scheme = self.extract_scheme_valuation(line, current_scheme)
+                idx += 1
 
         finalize_current_scheme()
 
