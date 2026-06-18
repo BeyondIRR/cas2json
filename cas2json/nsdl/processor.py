@@ -15,6 +15,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import re
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -23,7 +24,9 @@ from cas2json.flags import MULTI_TEXT_FLAGS
 from cas2json.nsdl.constants import (
     BASE_PAGE_WIDTH,
     CDSL_HEADERS,
-    MF_FOLIO_HEADERS,
+    CORPORATE_BOND_HEADERS,
+    MF_FOLIO_HEADERS_1,
+    MF_FOLIO_HEADERS_2,
     NSDL_MF_HEADERS,
     NSDL_STOCK_HEADERS,
     SCHEME_MAP,
@@ -45,33 +48,54 @@ class NSDLProcessor:
 
     @staticmethod
     def identify_values(
-        values: list[str],
-        holding: dict[str, None | str],
         word_rects: list[WordData],
-        headers: list[tuple[str, tuple[int, int]]],
+        headers: Sequence[tuple[str, tuple[int, int]]],
+        isin: str,
         width_scale: float = 1.0,
         value_tolerance: tuple[float, float] = (5, 5),
-    ) -> dict[str, None | str]:
+    ) -> tuple[dict[str, str | None], str]:
+        """
+        Identify values by matching word positions against known header columns.
+        Returns the holding dict and the derived scheme name.
+        """
         left_tol, right_tol = value_tolerance
-        if len(values) >= len(headers):
-            for header, val in zip(headers, values, strict=False):
-                holding[header[0]] = val
-        else:
-            for val in values:
-                val_rects = [(w[0], idx) for idx, w in enumerate(word_rects) if w[1] == val]
-                if not val_rects:
-                    continue
-                val_rect, idx = val_rects[0]
-                # Remove to avoid matching again
-                word_rects.pop(idx)
-                for header, rect in headers:
-                    if (
-                        val_rect.x0 >= (rect[0] * width_scale) - left_tol
-                        and val_rect.x1 <= (rect[1] * width_scale) + right_tol
-                    ):
-                        holding[header] = val
+        holding: dict[str, str | None] = {}
+        name_words: list[str] = []
+        for rect, word in word_rects:
+            if word == isin:
+                continue
+            matched = False
+            if re.match(r"^[(-]*\d[\d,.]*\)*$", word):
+                for header_name, (h_left, h_right) in headers:
+                    if rect.x0 >= (h_left * width_scale) - left_tol and rect.x1 <= (h_right * width_scale) + right_tol:
+                        holding[header_name] = word
+                        matched = True
                         break
-        return holding
+            if not matched:
+                name_words.append(word)
+
+        name = " ".join(name_words)
+        return holding, name
+
+    @staticmethod
+    def identify_mf_folio_headers(line: str) -> tuple[tuple[str, tuple[int, int]], ...] | None:
+        """
+        Identify the MF folio table layout from its header line.
+
+        NSDL MF folio tables can omit the Annualised Return column. Rows in a full table can also have
+        blank values, so the layout must be detected from table headers instead of row value count.
+        """
+        normalized_line = re.sub(r"\s+", " ", line).strip().lower()
+        if "annualised" in normalized_line:
+            return MF_FOLIO_HEADERS_1
+        if (
+            "folio no." in normalized_line
+            and "no. of" in normalized_line
+            and ("current value" in normalized_line or "current nav" in normalized_line)
+            and ("unrealised" in normalized_line)
+        ):
+            return MF_FOLIO_HEADERS_2
+        return None
 
     @staticmethod
     def extract_holders(line: str) -> DematOwner | None:
@@ -132,7 +156,12 @@ class NSDLProcessor:
 
     @staticmethod
     def extract_scheme_details(
-        line: str, word_rects: list[WordData], scheme_type: SchemeType, ac_type: str | None, page_width: float
+        line: str,
+        word_rects: list[WordData],
+        scheme_type: SchemeType,
+        ac_type: str | None,
+        page_width: float,
+        mf_folio_headers: tuple[tuple[str, tuple[int, int]], ...] = MF_FOLIO_HEADERS_1,
     ) -> DepositoryScheme | None:
         """
         Extract Scheme details for NSDL demat account from the line if present.
@@ -142,7 +171,7 @@ class NSDLProcessor:
         - "INE758E01017 JIO FINANCIAL SERVICES 5 311.70 1,558.50" (NSDL MFs)
         - "INE758E01017 JIO FINANCIAL SERVICES 10.00 5 311.70 1,558.50" (NSDL Stocks)
         - "INE883F01010 AADHAR HOUSING FINANCE 0.000 0.000 0.000 502.75 0.00" (CDSL)
-        - "INF109K01BF6 ICICI Prudential 123456 1234.793 12.3891 12345.00 12.6220 12345.39 1,354.39 5.42" (MF Folios)
+        - "INF179KC1BM8 ICICI Prudential 123456 1234.793 12.3891 12345.00 12.6220 12345.39 1,354.39 5.42" (MF Folios)
 
         Order of details (in above):
 
@@ -152,38 +181,41 @@ class NSDLProcessor:
         - ISIN, Scheme Name (incomplete), Folio, Units, Cost Per Unit, Total Cost, NAV, Market Value, Unrealized Profit/Loss, Annualised Return (MF Folios)
         """
         if scheme_match := re.search(patterns.SCHEME_DESCRIPTION, line, MULTI_TEXT_FLAGS):
-            isin, name, values, *_ = scheme_match.groups()
-            holding: dict[str, str | None] = {"cost": None, "units": None, "nav": None, "market_value": None}
-            values = re.findall(patterns.NUMBER, values.strip())
+            isin = scheme_match.group(1)
             width_scale = page_width / BASE_PAGE_WIDTH
             match ac_type:
-                case "NSDL" if scheme_type == SchemeType.MUTUAL_FUND:
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, NSDL_MF_HEADERS, width_scale)
+                case "NSDL" if scheme_type in (SchemeType.MUTUAL_FUND, SchemeType.ALTERNATE_INVESTMENT_FUND):
+                    headers = NSDL_MF_HEADERS
+                    value_tolerance = (5, 5)
                 case "NSDL" if scheme_type == SchemeType.STOCK:
-                    details = NSDLProcessor.identify_values(
-                        values, holding, word_rects, NSDL_STOCK_HEADERS, width_scale
-                    )
+                    headers = NSDL_STOCK_HEADERS
+                    value_tolerance = (5, 5)
+                case "NSDL" if scheme_type == SchemeType.CORPORATE_BOND:
+                    headers = CORPORATE_BOND_HEADERS
+                    value_tolerance = (5, 5)
                 case "CDSL":
-                    details = NSDLProcessor.identify_values(values, holding, word_rects, CDSL_HEADERS, width_scale)
+                    headers = CDSL_HEADERS
+                    value_tolerance = (5, 5)
                 case "MF":
-                    details = NSDLProcessor.identify_values(
-                        values, holding, word_rects, MF_FOLIO_HEADERS, width_scale, (10, 10)
-                    )
+                    headers = mf_folio_headers
+                    value_tolerance = (10, 10)
                 case _:
                     return None
 
-            price, units = format_values((details["cost"], details["units"]))
+            details, name = NSDLProcessor.identify_values(word_rects, headers, isin, width_scale, value_tolerance)
+
+            price, units = format_values((details.get("cost"), details.get("units")))
             invested_value = formatINR(details.get("invested")) or (price * units if price and units else None)
             # TODO: name are mostly split into lines but there are cases of page breaks and thus there
             # will be lots of validations and checks to do to parse correct name
-            name = re.sub(r"\s+", " ", name).strip()
+            name = re.sub(r"\s+", " ", name or "").strip()
             return DepositoryScheme(
                 isin=isin,
                 scheme_name=name,
                 units=units,
                 cost=price,
-                nav=formatINR(details["nav"]),
-                market_value=formatINR(details["market_value"]),
+                nav=formatINR(details.get("nav")),
+                market_value=formatINR(details.get("market_value")),
                 invested_value=invested_value,
                 scheme_type=scheme_type,
                 folio=details.get("folio"),
@@ -200,6 +232,7 @@ class NSDLProcessor:
         holders: list[DematOwner] = []
         demats: dict[str, DematAccount] = {}
         process_demats: bool = True
+        mf_folio_headers = MF_FOLIO_HEADERS_1
         for page_data in document_data:
             page_lines_data = list(page_data.lines_data)
             for idx, (line, words_rect) in enumerate(page_lines_data):
@@ -254,6 +287,7 @@ class NSDLProcessor:
 
                 if "portfolio value trend" in line.lower():
                     process_demats = False
+                    current_demat = None
                     continue
 
                 if "NSDL Demat Account" in line or "CDSL Demat Account" in line:
@@ -268,11 +302,20 @@ class NSDLProcessor:
                 if current_demat is None:
                     continue
 
-                elif any(i in line for i in SCHEME_MAP):
+                if (
+                    current_demat.ac_type == "MF"
+                    and not process_demats
+                    and (headers := self.identify_mf_folio_headers(line))
+                ):
+                    mf_folio_headers = headers or mf_folio_headers
+
+                if any(i in line for i in SCHEME_MAP):
                     scheme_type = SCHEME_MAP[line.strip()]
 
                 elif scheme := (
-                    self.extract_scheme_details(line, words_rect, scheme_type, current_demat.ac_type, page_data.width)
+                    self.extract_scheme_details(
+                        line, words_rect, scheme_type, current_demat.ac_type, page_data.width, mf_folio_headers
+                    )
                 ):
                     scheme.dp_id = current_demat.dp_id
                     scheme.client_id = current_demat.client_id

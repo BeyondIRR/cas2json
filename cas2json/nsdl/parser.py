@@ -16,18 +16,20 @@
 
 import re
 
-from pymupdf import TEXTFLAGS_TEXT, Page, Rect
+from pymupdf import Page, Rect
 
 from cas2json.exceptions import CASParseError
 from cas2json.flags import MULTI_TEXT_FLAGS
-from cas2json.parser import BaseCASParser
+from cas2json.parser import TEXT_EXTRACTION_FLAGS, BaseCASParser
 from cas2json.patterns import CAS_ID, DEMAT_STATEMENT_PERIOD, INVESTOR_STATEMENT_DP
 from cas2json.types import (
     CASMetaData,
     FileType,
     FileVersion,
     InvestorInfo,
+    LineData,
     StatementPeriod,
+    WordData,
 )
 
 
@@ -38,7 +40,7 @@ class NSDLParser(BaseCASParser):
     def parse_investor_info(page: Page) -> InvestorInfo:
         statement_regex = INVESTOR_STATEMENT_DP
         start_index = end_index = None
-        words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
+        words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXT_EXTRACTION_FLAGS)]
         page_lines = [line for line, _ in BaseCASParser.recover_lines(words)]
         for idx, line in enumerate(page_lines):
             if re.search(CAS_ID, line, re.I):
@@ -56,8 +58,12 @@ class NSDLParser(BaseCASParser):
 
         raise CASParseError("Unable to parse investor data")
 
+    @staticmethod
+    def recover_lines(words: list[WordData], tolerance: int = 4, vertical_factor: int = 4) -> LineData:
+        return BaseCASParser.recover_lines(words, tolerance=tolerance, vertical_factor=vertical_factor)
+
     def extract_statement_metadata(self) -> CASMetaData:
-        page_options = {"flags": TEXTFLAGS_TEXT, "sort": True, "option": "blocks"}
+        page_options = {"flags": TEXT_EXTRACTION_FLAGS, "sort": True, "option": "blocks"}
         first_page_blocks = self.document.get_page_text(pno=0, **page_options)
         file_type = self.parse_file_type(first_page_blocks)
         if file_type != self.dp_type:

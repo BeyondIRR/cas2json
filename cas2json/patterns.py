@@ -66,7 +66,7 @@ DP_CLIENT_ID = r"^DP\s*Id\s*:\s*(.+?)\s*Client\s*Id\s*:\s*(\d+)"
 DEMAT_MF_HEADER = r"Mutual Fund Folios\s+(\d+)\s+Folios\s+(\d+)\s+([\d,.]+)"
 DEMAT_HOLDER = r"([^\t\n0-9]+?)\s*\(\s*PAN\s*:\s*(.+?)\s*\)"
 # Scheme details
-SCHEME_DESCRIPTION = rf"^({ISIN})\s*(.+?)\s*((?:[(-]*\d[\d,.]*\s*)+)$"
+SCHEME_DESCRIPTION = rf"^({ISIN})\s+(.+)$"
 # Investor Details
 CAS_ID = r"[CAS|NSDL]\s+ID\s*:\s*(.+?)(?:\s|$)"
 INVESTOR_STATEMENT_DP = r"Statement\s+for\s+the\s+period|Your\s+demat\s+account\s+and\s+mutual\s+fund"

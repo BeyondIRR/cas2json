@@ -17,7 +17,7 @@
 import io
 import re
 
-from pymupdf import TEXTFLAGS_TEXT, Document, Page, Rect
+from pymupdf import TEXT_MEDIABOX_CLIP, TEXTFLAGS_TEXT, Document, Page, Rect
 
 from cas2json.enums import FileType
 from cas2json.exceptions import CASParseError, IncorrectPasswordError
@@ -30,6 +30,9 @@ from cas2json.types import (
     LineData,
     WordData,
 )
+
+# Avoid dropping tiny separator glyphs from partially clipped rows.
+TEXT_EXTRACTION_FLAGS = TEXTFLAGS_TEXT & ~TEXT_MEDIABOX_CLIP
 
 
 class BaseCASParser:
@@ -165,8 +168,7 @@ class BaseCASParser:
             if metadata.file_type == FileType.NSDL and page_num == 0:
                 # No useful data in first page of NSDL doc
                 continue
-            # flags are important as they control the extraction behavior like keep "hidden text" or not
-            words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXTFLAGS_TEXT)]
+            words = [(Rect(w[:4]), w[4]) for w in page.get_text("words", sort=True, flags=TEXT_EXTRACTION_FLAGS)]
             if not words:
                 continue
             width, height = page.rect.width, page.rect.height
