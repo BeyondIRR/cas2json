@@ -176,6 +176,20 @@ class CAMSProcessor:
         return current_scheme
 
     @staticmethod
+    def get_valuation_context(page_lines_data: list[tuple[str, list[WordData]]], idx: int, max_lines: int = 18) -> str:
+        """Build a short text context for valuation fields that are split over multiple PDF lines."""
+        line = page_lines_data[idx][0]
+        if not re.search(r"\b(Market|Valuation|Closing|NAV|Total\s+Cost)\b", line, TEXT_FLAGS):
+            return line
+
+        lines = []
+        for next_line, _ in page_lines_data[idx : idx + max_lines]:
+            if lines and re.search(patterns.FOLIO, next_line):
+                break
+            lines.append(next_line)
+        return " ".join(lines)
+
+    @staticmethod
     def extract_transactions(
         line: str, word_rects: list[WordData], headers: dict[str, Rect], value_tolerance: tuple[float, float] = (20, 5)
     ) -> list[TransactionData]:
@@ -350,7 +364,8 @@ class CAMSProcessor:
                             current_scheme.calculated_units += txn.units
                     current_scheme.transactions.extend(parsed_txns)
 
-                current_scheme = self.extract_scheme_valuation(line, current_scheme)
+                valuation_context = self.get_valuation_context(page_lines_data, idx)
+                current_scheme = self.extract_scheme_valuation(valuation_context, current_scheme)
                 idx += 1
 
         finalize_current_scheme()
