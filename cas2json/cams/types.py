@@ -42,6 +42,7 @@ class CAMSScheme(Scheme):
     rta_code: str | None = None
     opening_units: Decimal | float | None = None
     calculated_units: Decimal | float | None = None
+    registered_name: str | None = None
 
 
 @dataclass(slots=True)
