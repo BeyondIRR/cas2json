@@ -32,25 +32,28 @@ pip install -U cas2json
 ```python
 # For CAMS/KFINTECH
 from cas2json import parse_cams_pdf
+
 data = parse_cams_pdf("/path/to/cams/file.pdf", "password")
 
 # For NSDL
 from cas2json import parse_nsdl_pdf
+
 data = parse_nsdl_pdf("/path/to/nsdl/file.pdf", "password")
 
-#For CDSL
+# For CDSL
 from cas2json import parse_cdsl_pdf
+
 data = parse_cdsl_pdf("/path/to/cdsl/file.pdf", "password")
 
 # To get data in form of Python dict
 from dataclasses import asdict
+
 python_dict = asdict(data)
 
 # To convert the data from python dict to JSON
 from msgspec import json
+
 json_data = json.encode(python_dict)
-
-
 ```
 
 Notes:
