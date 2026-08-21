@@ -311,6 +311,11 @@ class CAMSProcessor:
                     current_folio, current_pan = folio_pan
                     idx += 1
                     continue
+                # Parse investor name between folio details and scheme name
+                if idx > 0 and "Folio No" in page_lines_data[idx - 1][0] and "PAN" in page_lines_data[idx - 1][0]:
+                    registered_name = line
+                else:
+                    registered_name = page_lines_data[idx - 1][0]
                 # Long scheme names are sometimes split into multiple lines (usually 2).
                 # Thus, we need to join the split lines.
                 scheme_line = line
@@ -342,6 +347,7 @@ class CAMSProcessor:
                         rta=rta or self.extract_registrar(scheme_line),
                         opening_units=Decimal("0.0"),
                         calculated_units=Decimal("0.0"),
+                        registered_name=registered_name,
                     )
 
                 if current_scheme is None:
