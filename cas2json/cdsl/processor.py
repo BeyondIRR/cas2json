@@ -22,6 +22,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from cas2json import patterns
+from cas2json.cdsl.layout import read_table
 from cas2json.cdsl.types import CDSLMFScheme
 from cas2json.cdsl.utils import resolve_scheme_type_from_heading
 from cas2json.constants import TOLERANCE
@@ -39,6 +40,11 @@ from cas2json.types import (
 from cas2json.utils import format_values
 
 logger = logging.getLogger(__name__)
+
+EMPTY_VALUE = "--"
+"""Placeholder CDSL prints in a holdings table for a balance that is empty."""
+FOLIO_AT_LINE_END = re.compile(r"(\d{6,}(?:/\d+)?)\s*$")
+"""A folio number closing a reconstructed table line (older templates print it a line above the ISIN)."""
 
 
 class CDSLProcessor(NSDLProcessor):
@@ -126,7 +132,7 @@ class CDSLProcessor(NSDLProcessor):
                 invested_value=CDSLProcessor._clean_decimal(invested_value),
                 market_value=CDSLProcessor._clean_decimal(market_value),
                 scheme_type=scheme_type,
-                broker=broker,
+                broker=broker or None,
                 gain=CDSLProcessor._clean_decimal(gain),
                 gain_pct=CDSLProcessor._clean_decimal(gain_pct),
                 expense_regular_pct=CDSLProcessor._clean_decimal(exp_regular),
@@ -134,37 +140,44 @@ class CDSLProcessor(NSDLProcessor):
                 commission=CDSLProcessor._clean_decimal(commission),
             )
         elif scheme_type in [SchemeType.STOCK, SchemeType.CORPORATE_BOND]:
-            # Find first decimal number after ISIN
+            # Find the first value after the ISIN: a decimal number, or "--" (the placeholder CDSL
+            # prints for an empty balance, e.g. every balance of a holding transferred out)
             try:
                 isin_index = next(i for i, word in enumerate(words) if re.match(patterns.ISIN, word))
             except StopIteration:
                 return None
             try:
-                first_decimal_index = next(
-                    i for i in range(isin_index + 1, len(words)) if re.search(r"\d+\.\d+", words[i].replace(",", ""))
+                first_value_index = next(
+                    i
+                    for i in range(isin_index + 1, len(words))
+                    if words[i] == EMPTY_VALUE or re.search(r"\d+\.\d+", words[i].replace(",", ""))
                 )
             except StopIteration:
                 return None
-            # Keep ISIN + decimals onwards
-            words = [words[isin_index], *words[first_decimal_index:]]
-            if (len(words) < 5 and scheme_type == SchemeType.STOCK) or (
+            # Keep ISIN + values onwards
+            words = [words[isin_index], *words[first_value_index:]]
+            if (len(words) < 8 and scheme_type == SchemeType.STOCK) or (
                 len(words) < 7 and scheme_type == SchemeType.CORPORATE_BOND
             ):
                 return None
             if scheme_type == SchemeType.STOCK:
                 isin, units, _, _, _, _, nav, market_value = words[:8]
+                face_value = None
             else:
                 isin = words[0]
                 units, face_value, nav, market_value = words[-4:]
             scheme = DepositoryScheme(
                 isin=isin,
-                units=CDSLProcessor._clean_decimal(units),
+                # An empty current balance is a holding of zero units, not an unknown quantity.
+                units=Decimal(0) if units == EMPTY_VALUE else CDSLProcessor._clean_decimal(units),
                 nav=CDSLProcessor._clean_decimal(nav),
                 market_value=CDSLProcessor._clean_decimal(market_value),
                 scheme_type=scheme_type,
             )
             if scheme_type == SchemeType.CORPORATE_BOND:
-                scheme.invested_value = Decimal(face_value.replace(",", "")) * Decimal(units.replace(",", ""))
+                face_value = CDSLProcessor._clean_decimal(face_value)
+                if face_value is not None and scheme.units is not None:
+                    scheme.invested_value = face_value * scheme.units
             return scheme
         return None
 
@@ -245,6 +258,7 @@ class CDSLProcessor(NSDLProcessor):
         process_demats: bool = True
         process_table: bool = False
         table_data = defaultdict(list)
+        table_pages = {}
         page = 0
 
         for page_data in document_data:
@@ -326,12 +340,36 @@ class CDSLProcessor(NSDLProcessor):
                 elif process_table:
                     key = (current_demat.ac_type, scheme_type, current_demat.dp_id, current_demat.client_id, page)
                     table_data[key].extend(_words_rect)
+                    table_pages[key] = page_data
 
         for (ac_type, scheme_type, dp_id, client_id, _), words_rect in table_data.items():
+            page_data = table_pages[(ac_type, scheme_type, dp_id, client_id, _)]
+            if ac_type in ("CDSL", "MF"):
+                # Ruled tables are read cell by cell, which also recovers the wrapped scheme names.
+                table = read_table(words_rect, scheme_type, page_data.vertical_rules, page_data.horizontal_rules)
+                if table is not None:
+                    for scheme in table:
+                        scheme.dp_id = dp_id
+                        scheme.client_id = client_id
+                        schemes.append(scheme)
+                    continue
+                logger.warning("Could not read a %s table cell by cell; parsing its text lines instead", scheme_type)
+            previous_line = ""
             for line in self.recover_table_lines(words_rect):
                 if scheme := self.extract_scheme_details(line, scheme_type, ac_type):
+                    # The folio cell may sit one text line above the ISIN; the line reconstruction
+                    # then attaches it to the end of the scheme name line.
+                    if (
+                        scheme.folio is None
+                        and scheme_type == SchemeType.MUTUAL_FUND
+                        and (folio_match := FOLIO_AT_LINE_END.search(previous_line))
+                    ):
+                        scheme.folio = folio_match.group(1)
                     scheme.dp_id = dp_id
                     scheme.client_id = client_id
                     schemes.append(scheme)
+                previous_line = line
 
-        return DepositoryCASData(accounts=list(demats.values()), schemes=schemes)
+        data = DepositoryCASData(accounts=list(demats.values()), schemes=schemes)
+        self.reconcile(data)
+        return data

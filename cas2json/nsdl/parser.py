@@ -62,6 +62,44 @@ class NSDLParser(BaseCASParser):
     def recover_lines(words: list[WordData], tolerance: int = 4, vertical_factor: int = 4) -> LineData:
         return BaseCASParser.recover_lines(words, tolerance=tolerance, vertical_factor=vertical_factor)
 
+    @staticmethod
+    def extract_rules(
+        page: Page, min_length: float = 8.0
+    ) -> tuple[tuple[tuple[float, float, float], ...], tuple[tuple[float, float, float], ...]]:
+        """
+        Ruling lines drawn on the page: vertical ones as ``(x, y0, y1)``, horizontal ones as ``(y, x0, x1)``.
+
+        Newer NSDL statements and every CDSL statement draw their holdings tables as ruled grids;
+        the cell borders give exact column boundaries, and row borders where they are drawn.
+        Statements without rulings fall back to the header words and the text geometry.
+        """
+        vertical: list[tuple[float, float, float]] = []
+        horizontal: list[tuple[float, float, float]] = []
+        try:
+            drawings = page.get_drawings()
+        except Exception:  # a malformed content stream must not abort text parsing
+            return (), ()
+        for drawing in drawings:
+            for item in drawing["items"]:
+                if item[0] == "l":
+                    p1, p2 = item[1], item[2]
+                    if abs(p1.x - p2.x) < 1 and abs(p1.y - p2.y) >= min_length:
+                        vertical.append((round((p1.x + p2.x) / 2, 1), min(p1.y, p2.y), max(p1.y, p2.y)))
+                    elif abs(p1.y - p2.y) < 1 and abs(p1.x - p2.x) >= min_length:
+                        horizontal.append((round((p1.y + p2.y) / 2, 1), min(p1.x, p2.x), max(p1.x, p2.x)))
+                elif item[0] == "re":
+                    rect = item[1]
+                    if rect.width < 1 and rect.height >= min_length:
+                        vertical.append((round(rect.x0, 1), rect.y0, rect.y1))
+                    elif rect.height < 1 and rect.width >= min_length:
+                        horizontal.append((round(rect.y0, 1), rect.x0, rect.x1))
+        return tuple(vertical), tuple(horizontal)
+
+    @staticmethod
+    def extract_vertical_rules(page: Page, min_length: float = 8.0) -> tuple[tuple[float, float, float], ...]:
+        """Vertical ruling lines drawn on the page as ``(x, y0, y1)``."""
+        return NSDLParser.extract_rules(page, min_length)[0]
+
     def extract_statement_metadata(self) -> CASMetaData:
         page_options = {"flags": TEXT_EXTRACTION_FLAGS, "sort": True, "option": "blocks"}
         first_page_blocks = self.document.get_page_text(pno=0, **page_options)

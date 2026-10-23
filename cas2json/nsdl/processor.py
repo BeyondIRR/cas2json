@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+import logging
 import re
 from collections.abc import Sequence
 from decimal import Decimal
@@ -31,6 +32,17 @@ from cas2json.nsdl.constants import (
     NSDL_STOCK_HEADERS,
     SCHEME_MAP,
 )
+from cas2json.nsdl.layout import (
+    NUMERIC_FIELDS,
+    NUMERIC_RE,
+    TableLayout,
+    build_layout,
+    header_words,
+    is_data_row,
+    is_header_line,
+    isin_of,
+    required_fields,
+)
 from cas2json.types import (
     DematAccount,
     DematOwner,
@@ -41,6 +53,12 @@ from cas2json.types import (
     WordData,
 )
 from cas2json.utils import format_values, formatINR
+
+logger = logging.getLogger(__name__)
+
+# Lines that close a holdings table. Rows printed after them without a new header (for instance
+# the lock-in details that follow a CDSL account) are not holdings.
+TABLE_END_PREFIXES = ("Sub Total", "Total", "Grand Total", "Notes", "Note:")
 
 
 class NSDLProcessor:
@@ -78,6 +96,45 @@ class NSDLProcessor:
         return holding, name
 
     @staticmethod
+    def identify_values_by_layout(
+        word_rects: list[WordData], layout: TableLayout, isin: str
+    ) -> tuple[dict[str, str | None], str]:
+        """
+        Identify values by the column cell each word falls in (see ``cas2json.nsdl.layout``).
+        Returns the holding dict and the derived scheme name.
+        """
+        holding: dict[str, str | None] = {}
+        name_words: list[WordData] = []
+        for rect, word in word_rects:
+            if word == isin or isin_of(word) == isin:
+                continue
+            column = layout.column_at(rect)
+            field = column.field if column else None
+            if field in NUMERIC_FIELDS and NUMERIC_RE.match(word):
+                holding.setdefault(field, word)
+            elif field in ("symbol", "frequency", "maturity"):
+                continue  # stock symbol, UCC code, coupon frequency or maturity date: not part of the name
+            else:
+                name_words.append((rect, word))
+        # A wrapped name may share the text line with its first line; read it line by line.
+        name = " ".join(word for _, word in sorted(name_words, key=lambda w: (round(w[0].y0), w[0].x0)))
+        return holding, name
+
+    @staticmethod
+    def lookahead_rows(page_lines_data: list[tuple[str, list[WordData]]], start: int) -> list[list[WordData]]:
+        """Words of the data rows of the table whose first row is at ``start``, up to the end of the table."""
+        rows: list[list[WordData]] = []
+        for line, words in page_lines_data[start:]:
+            stripped = line.strip()
+            if stripped.startswith(TABLE_END_PREFIXES) or stripped in SCHEME_MAP or "Summary of Transaction" in line:
+                break
+            if is_data_row(words):
+                rows.append(words)
+            elif rows and is_header_line(words):
+                break
+        return rows
+
+    @staticmethod
     def identify_mf_folio_headers(line: str) -> tuple[tuple[str, tuple[int, int]], ...] | None:
         """
         Identify the MF folio table layout from its header line.
@@ -105,6 +162,7 @@ class NSDLProcessor:
         Supported line formats
         ----------------------
         - "DEEPESH BHARGAVA (PAN:ALXXXXXX3E)"
+        - "DEEPESH BHARGAVA [ALXXXXXX3E]"
         """
         if holder_match := re.search(patterns.DEMAT_HOLDER, line, MULTI_TEXT_FLAGS):
             name, pan = holder_match.groups()
@@ -162,9 +220,14 @@ class NSDLProcessor:
         ac_type: str | None,
         page_width: float,
         mf_folio_headers: tuple[tuple[str, tuple[int, int]], ...] = MF_FOLIO_HEADERS_1,
+        layout: TableLayout | None = None,
     ) -> DepositoryScheme | None:
         """
         Extract Scheme details for NSDL demat account from the line if present.
+
+        When ``layout`` is given (columns derived from the table's own header, see
+        ``cas2json.nsdl.layout``) values are read from its cells; otherwise the fixed column
+        positions of ``cas2json.nsdl.constants`` are used.
 
         Supported line formats
         ----------------------
@@ -182,27 +245,30 @@ class NSDLProcessor:
         """
         if scheme_match := re.search(patterns.SCHEME_DESCRIPTION, line, MULTI_TEXT_FLAGS):
             isin = scheme_match.group(1)
-            width_scale = page_width / BASE_PAGE_WIDTH
-            match ac_type:
-                case "NSDL" if scheme_type in (SchemeType.MUTUAL_FUND, SchemeType.ALTERNATE_INVESTMENT_FUND):
-                    headers = NSDL_MF_HEADERS
-                    value_tolerance = (5, 5)
-                case "NSDL" if scheme_type == SchemeType.STOCK:
-                    headers = NSDL_STOCK_HEADERS
-                    value_tolerance = (5, 5)
-                case "NSDL" if scheme_type == SchemeType.CORPORATE_BOND:
-                    headers = CORPORATE_BOND_HEADERS
-                    value_tolerance = (5, 5)
-                case "CDSL":
-                    headers = CDSL_HEADERS
-                    value_tolerance = (5, 5)
-                case "MF":
-                    headers = mf_folio_headers
-                    value_tolerance = (10, 10)
-                case _:
-                    return None
+            if layout is not None:
+                details, name = NSDLProcessor.identify_values_by_layout(word_rects, layout, isin)
+            else:
+                width_scale = page_width / BASE_PAGE_WIDTH
+                match ac_type:
+                    case "NSDL" if scheme_type in (SchemeType.MUTUAL_FUND, SchemeType.ALTERNATE_INVESTMENT_FUND):
+                        headers = NSDL_MF_HEADERS
+                        value_tolerance = (5, 5)
+                    case "NSDL" if scheme_type == SchemeType.STOCK:
+                        headers = NSDL_STOCK_HEADERS
+                        value_tolerance = (5, 5)
+                    case "NSDL" if scheme_type == SchemeType.CORPORATE_BOND:
+                        headers = CORPORATE_BOND_HEADERS
+                        value_tolerance = (5, 5)
+                    case "CDSL":
+                        headers = CDSL_HEADERS
+                        value_tolerance = (5, 5)
+                    case "MF":
+                        headers = mf_folio_headers
+                        value_tolerance = (10, 10)
+                    case _:
+                        return None
 
-            details, name = NSDLProcessor.identify_values(word_rects, headers, isin, width_scale, value_tolerance)
+                details, name = NSDLProcessor.identify_values(word_rects, headers, isin, width_scale, value_tolerance)
 
             price, units = format_values((details.get("cost"), details.get("units")))
             invested_value = formatINR(details.get("invested")) or (price * units if price and units else None)
@@ -233,6 +299,11 @@ class NSDLProcessor:
         demats: dict[str, DematAccount] = {}
         process_demats: bool = True
         mf_folio_headers = MF_FOLIO_HEADERS_1
+        # Column layout of the table being read, derived from its header (see cas2json.nsdl.layout)
+        layout: TableLayout | None = None
+        header: list[WordData] = []
+        collecting: bool = False  # header lines of a new table are being gathered
+        in_table: bool = True  # False after a table's totals until a new header appears
         for page_data in document_data:
             page_lines_data = list(page_data.lines_data)
             for idx, (line, words_rect) in enumerate(page_lines_data):
@@ -290,6 +361,7 @@ class NSDLProcessor:
                     current_demat = None
                     continue
 
+                previous_demat = current_demat
                 if "NSDL Demat Account" in line or "CDSL Demat Account" in line:
                     current_demat = None
 
@@ -298,6 +370,10 @@ class NSDLProcessor:
 
                 elif dp_client_ids := self.extract_dp_client_id(line):
                     current_demat = demats.get(dp_client_ids[0] + dp_client_ids[1])
+
+                if current_demat is not previous_demat:
+                    # A new account section starts: its tables carry their own headers.
+                    layout, header, collecting, in_table = None, [], False, True
 
                 if current_demat is None:
                     continue
@@ -309,16 +385,85 @@ class NSDLProcessor:
                 ):
                     mf_folio_headers = headers or mf_folio_headers
 
-                if any(i in line for i in SCHEME_MAP):
-                    scheme_type = SCHEME_MAP[line.strip()]
+                stripped = line.strip()
+                if stripped in SCHEME_MAP:
+                    # Table title: the header lines follow, then the rows.
+                    scheme_type = SCHEME_MAP[stripped]
+                    layout, header, collecting, in_table = None, [], True, True
+                    continue
 
-                elif scheme := (
+                if collecting:
+                    if is_header_line(words_rect, min_words=1):
+                        header.extend(header_words(words_rect))
+                        continue
+                    if not is_data_row(words_rect):
+                        continue  # sub-titles such as "Equity Shares"
+                    rows = self.lookahead_rows(page_lines_data, idx)
+                    layout = build_layout(
+                        header, rows, required_fields(current_demat.ac_type), page_data.vertical_rules
+                    )
+                    if layout is None:
+                        logger.warning(
+                            "Could not derive table columns from the header of %r; using fixed positions", line
+                        )
+                    collecting = False
+
+                elif stripped.startswith(TABLE_END_PREFIXES):
+                    layout, header, collecting, in_table = None, [], False, False
+                    continue
+
+                elif is_header_line(words_rect):
+                    # A header without a title: the table continues from the previous page.
+                    layout, header, collecting, in_table = None, header_words(words_rect), True, True
+                    continue
+
+                elif any(i in line for i in SCHEME_MAP):
+                    # e.g. "Equities (E) 1,234.00 10.00%" in the portfolio composition table
+                    scheme_type = SCHEME_MAP[stripped]
+                    continue
+
+                if not in_table:
+                    continue
+
+                if scheme := (
                     self.extract_scheme_details(
-                        line, words_rect, scheme_type, current_demat.ac_type, page_data.width, mf_folio_headers
+                        line, words_rect, scheme_type, current_demat.ac_type, page_data.width, mf_folio_headers, layout
                     )
                 ):
                     scheme.dp_id = current_demat.dp_id
                     scheme.client_id = current_demat.client_id
                     schemes.append(scheme)
 
-        return DepositoryCASData(accounts=list(demats.values()), schemes=schemes)
+        data = DepositoryCASData(accounts=list(demats.values()), schemes=schemes)
+        self.reconcile(data)
+        return data
+
+    @staticmethod
+    def reconcile(data: DepositoryCASData, tolerance: Decimal = Decimal("1.00")) -> list[str]:
+        """
+        Compare the parsed holdings with the account summary printed in the statement.
+
+        Returns the discrepancies (also logged as warnings): a scheme count that differs from the
+        summary, or a holdings value that differs from the account value by more than ``tolerance``.
+        """
+        issues: list[str] = []
+        for account in data.accounts:
+            rows = [
+                scheme
+                for scheme in data.schemes
+                if (scheme.dp_id or "") == (account.dp_id or "")
+                and (scheme.client_id or "") == (account.client_id or "")
+            ]
+            if len(rows) != account.schemes_count:
+                issues.append(
+                    f"{account.name}: statement lists {account.schemes_count} schemes but {len(rows)} were parsed"
+                )
+            if account.units is not None:
+                total = sum((Decimal(str(s.market_value)) for s in rows if s.market_value is not None), Decimal(0))
+                if abs(total - Decimal(str(account.units))) > tolerance:
+                    issues.append(
+                        f"{account.name}: parsed holdings value {total} differs from statement value {account.units}"
+                    )
+        for issue in issues:
+            logger.warning(issue)
+        return issues
