@@ -148,6 +148,17 @@ class BaseCASParser:
         """Extract statement metadata like file type, version, statement period and investor info."""
         ...
 
+    @staticmethod
+    def extract_rules(
+        page: Page,
+    ) -> tuple[tuple[tuple[float, float, float], ...], tuple[tuple[float, float, float], ...]]:
+        """
+        Ruling lines drawn on the page: vertical ones as ``(x, y0, y1)`` and horizontal ones as ``(y, x0, x1)``.
+
+        Parsers that read table cells from ruled grids override this; the base parser reads none.
+        """
+        return (), ()
+
     def find_in_doc_page(self, text: str, page_no: int = 0) -> bool:
         """Check if the given text is present in the document's page."""
         page = self.document.load_page(page_no)
@@ -172,6 +183,15 @@ class BaseCASParser:
             if not words:
                 continue
             width, height = page.rect.width, page.rect.height
-            document_data.append(BasePageData(lines_data=self.recover_lines(words), width=width, height=height))
+            vertical_rules, horizontal_rules = self.extract_rules(page)
+            document_data.append(
+                BasePageData(
+                    lines_data=self.recover_lines(words),
+                    width=width,
+                    height=height,
+                    vertical_rules=vertical_rules,
+                    horizontal_rules=horizontal_rules,
+                )
+            )
 
         return CASParsedData(document_data=document_data, metadata=metadata)

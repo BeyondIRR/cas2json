@@ -27,6 +27,9 @@ SCHEME_MAP = defaultdict(
         "Alternate Investment Fund (A)": SchemeType.ALTERNATE_INVESTMENT_FUND,
         "Preference Shares (P)": SchemeType.PREFERENCE_SHARES,
         "Mutual Fund Folios (F)": SchemeType.MUTUAL_FUND,
+        # Specialized Investment Funds are reported inside the Mutual Fund Folios section with the
+        # same table layout and are counted in its scheme total.
+        "Specialized Investment Fund (SF)": SchemeType.MUTUAL_FUND,
     },
 )
 NSDL_STOCK_HEADERS = (

@@ -39,6 +39,10 @@ class BasePageData:
     lines_data: LineData
     width: float
     height: float
+    vertical_rules: tuple[tuple[float, float, float], ...] = field(default=(), kw_only=True)
+    """Vertical ruling lines drawn on the page as ``(x, y0, y1)``; used to recover table columns."""
+    horizontal_rules: tuple[tuple[float, float, float], ...] = field(default=(), kw_only=True)
+    """Horizontal ruling lines drawn on the page as ``(y, x0, x1)``; used to recover table rows."""
 
 
 @dataclass(slots=True)
