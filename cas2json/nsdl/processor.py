@@ -105,6 +105,7 @@ class NSDLProcessor:
         Supported line formats
         ----------------------
         - "DEEPESH BHARGAVA (PAN:ALXXXXXX3E)"
+        - "DEEPESH BHARGAVA [ALXXXXXX3E]"
         """
         if holder_match := re.search(patterns.DEMAT_HOLDER, line, MULTI_TEXT_FLAGS):
             name, pan = holder_match.groups()

@@ -64,7 +64,11 @@ PAN = r"PAN\s*:\s*([A-Z]{5}\d{4}[A-Z])"
 DEMAT = r"(CDSL|NSDL)\s+Demat\s+Account\s+(\d+)\s+([\d,.]+)"
 DP_CLIENT_ID = r"^DP\s*Id\s*:\s*(.+?)\s*Client\s*Id\s*:\s*(\d+)"
 DEMAT_MF_HEADER = r"Mutual Fund Folios\s+(\d+)\s+Folios\s+(\d+)\s+([\d,.]+)"
-DEMAT_HOLDER = r"([^\t\n0-9]+?)\s*\(\s*PAN\s*:\s*(.+?)\s*\)"
+DEMAT_HOLDER = (
+    r"([^\t\n0-9]+?)\s*"  # holder name
+    r"(?:\(\s*PAN\s*:|\[\s*(?:PAN\s*:)?)"  # "(PAN:" or "[" / "[PAN:"
+    r"\s*(.+?)\s*[\)\]]"  # PAN followed by closing ")" or "]"
+)
 # Scheme details
 SCHEME_DESCRIPTION = rf"^({ISIN})\s+(.+)$"
 # Investor Details
