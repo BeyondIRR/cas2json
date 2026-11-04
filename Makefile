@@ -44,6 +44,10 @@ package: clean
 	@echo "Packaging code..."
 	uv build
 
+test:
+	@echo "-> Running tests"
+	uv run pytest
+
 remove-hooks:
 	@echo "-> Removing the pre-commit hooks"
 	uv run pre-commit uninstall
